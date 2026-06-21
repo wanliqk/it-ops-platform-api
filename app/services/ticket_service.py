@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.ticket import Ticket, TicketAction, TicketRecord, TicketStatus
+from app.models import Ticket, TicketAction, TicketRecord, TicketStatus
 from app.schemas.ticket import TicketCreate, TicketUpdate
 
 

@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.asset import Asset, AssetCategory
+from app.models import Asset, AssetCategory
 from app.schemas.asset import AssetCategoryCreate, AssetCreate
 
 

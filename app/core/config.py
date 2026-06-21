@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     app_env: str = "local"
     debug: bool = True
     api_v1_prefix: str = "/api/v1"
+    secret_key: str = "change-me-in-production"
+    access_token_expire_minutes: int = 120
     database_url: str = (
         "mysql+pymysql://it:123456@127.0.0.1:3306/"
         "it_ops_platform?charset=utf8mb4"

@@ -70,3 +70,54 @@ ruff check .
 alembic revision --autogenerate -m "init"
 alembic upgrade head
 ```
+
+## 登录接口
+
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "test_admin_password"
+}
+```
+
+## 退出接口
+
+```http
+POST /api/v1/auth/logout
+Authorization: Bearer <access_token>
+```
+
+返回：
+
+```json
+{
+  "message": "Logout successful. Please clear the local access token."
+}
+```
+
+当前访问令牌为无状态签名 token，后端会校验 token 是否有效；退出成功后由前端清除本地保存的 token。
+
+返回：
+
+```json
+{
+  "access_token": "...",
+  "token_type": "bearer",
+  "expires_in": 7200,
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "real_name": "系统管理员",
+    "role": "admin",
+    "department": "信息部",
+    "phone": "13800000001",
+    "email": "admin@example.com",
+    "status": 1,
+    "created_at": "2026-06-21T08:50:00",
+    "updated_at": "2026-06-21T08:50:00"
+  }
+}
+```
