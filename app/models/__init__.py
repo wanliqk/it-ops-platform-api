@@ -1,4 +1,5 @@
 from app.models.asset import Asset, AssetCategory, AssetStatus
+from app.models.faq import Faq, FaqCategory
 from app.models.operation_log import OperationLog, OperationResult
 from app.models.ticket import (
     RepairRecord,
@@ -16,6 +17,8 @@ __all__ = [
     "Asset",
     "AssetCategory",
     "AssetStatus",
+    "Faq",
+    "FaqCategory",
     "OperationLog",
     "OperationResult",
     "RepairRecord",

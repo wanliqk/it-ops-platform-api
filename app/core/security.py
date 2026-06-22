@@ -1,17 +1,36 @@
 import base64
 import hashlib
-import hmac
-import json
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from jose import JWTError, jwt
+
 from app.core.config import settings
+
+try:
+    from passlib.context import CryptContext
+except ImportError:  # pragma: no cover - dependency is declared for application runtime
+    CryptContext = None
+
+password_context = (
+    CryptContext(schemes=["bcrypt"], deprecated="auto") if CryptContext is not None else None
+)
+ALGORITHM = "HS256"
+
+
+def hash_password(password: str) -> str:
+    if password_context is None:
+        raise RuntimeError("passlib[bcrypt] is required to hash passwords")
+    return password_context.hash(password)
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
     if not password_hash:
         return False
+
+    if password_hash.startswith("$2") and password_context is not None:
+        return password_context.verify(plain_password, password_hash)
 
     parts = password_hash.split("$")
     if parts[0] == "pbkdf2_sha256":
@@ -24,31 +43,15 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
     expires_at = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
-    payload = {"sub": subject, "exp": int(expires_at.timestamp())}
-    encoded_payload = _urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
-    signature = _sign(encoded_payload)
-    return f"{encoded_payload}.{signature}"
+    payload = {"sub": subject, "exp": expires_at}
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict[str, Any] | None:
     try:
-        encoded_payload, signature = token.split(".", maxsplit=1)
-    except ValueError:
+        return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+    except JWTError:
         return None
-
-    if not secrets.compare_digest(_sign(encoded_payload), signature):
-        return None
-
-    padded_payload = encoded_payload + "=" * (-len(encoded_payload) % 4)
-    try:
-        payload = json.loads(base64.urlsafe_b64decode(padded_payload.encode()))
-    except (ValueError, json.JSONDecodeError):
-        return None
-
-    if int(payload.get("exp", 0)) < int(datetime.now(UTC).timestamp()):
-        return None
-
-    return payload
 
 
 def _verify_pbkdf2_sha256(plain_password: str, parts: list[str]) -> bool:
@@ -75,12 +78,3 @@ def _verify_pbkdf2_sha256(plain_password: str, parts: list[str]) -> bool:
         derived.hex(),
     }
     return any(secrets.compare_digest(candidate, expected_hash) for candidate in candidates)
-
-
-def _sign(value: str) -> str:
-    digest = hmac.new(settings.secret_key.encode(), value.encode(), hashlib.sha256).digest()
-    return _urlsafe_b64encode(digest)
-
-
-def _urlsafe_b64encode(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode().rstrip("=")
