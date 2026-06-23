@@ -159,6 +159,34 @@ def operation_log_dict(log: Any) -> dict[str, Any]:
     return data
 
 
+FAQ_CATEGORY_NAMES = {
+    "computer": "电脑问题",
+    "network": "网络问题",
+    "printer": "打印机问题",
+    "account": "账号系统问题",
+    "other": "其他问题",
+}
+
+
+def faq_dict(faq: Any, *, include_content: bool = True) -> dict[str, Any]:
+    fields = [
+        "id",
+        "title",
+        "category",
+        "summary",
+        "view_count",
+        "sort_order",
+        "status",
+        "created_at",
+        "updated_at",
+    ]
+    if include_content:
+        fields.insert(4, "content")
+    data = obj_dict(faq, fields)
+    data["category_name"] = FAQ_CATEGORY_NAMES.get(str(faq.category), str(faq.category))
+    return data
+
+
 def _value(value: Any) -> Any:
     if isinstance(value, Decimal):
         return float(value)

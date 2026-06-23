@@ -45,5 +45,12 @@ def dicts(_: Annotated[User, Depends(get_current_user)]) -> dict:
                 {"label": "维修中", "value": "repairing"},
                 {"label": "已报废", "value": "scrapped"},
             ],
+            "faq_category": [
+                {"label": "电脑问题", "value": "computer"},
+                {"label": "网络问题", "value": "network"},
+                {"label": "打印机问题", "value": "printer"},
+                {"label": "账号系统问题", "value": "account"},
+                {"label": "其他问题", "value": "other"},
+            ],
         }
     )

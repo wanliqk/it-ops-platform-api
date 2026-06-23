@@ -228,6 +228,18 @@ Authorization: Bearer <access_token>
 
 ---
 
+## 3.8 FAQ 分类 faq.category
+
+| 值       | 说明     |
+| ------- | ------ |
+| computer | 电脑问题   |
+| network  | 网络问题   |
+| printer  | 打印机问题  |
+| account  | 账号系统问题 |
+| other    | 其他问题   |
+
+---
+
 # 4. 权限规则
 
 ## 4.1 普通员工 employee
@@ -241,6 +253,7 @@ Authorization: Bearer <access_token>
 查看自己的工单列表
 查看自己的工单详情
 取消自己的 pending 状态工单
+查看启用状态的 FAQ 列表和详情
 ```
 
 不允许：
@@ -268,6 +281,7 @@ Authorization: Bearer <access_token>
 查看资产列表
 查看资产详情
 查看维修记录
+查看 FAQ 列表和详情
 ```
 
 不允许：
@@ -277,6 +291,7 @@ Authorization: Bearer <access_token>
 禁用用户
 删除资产
 查看系统操作日志
+维护 FAQ
 ```
 
 ---
@@ -295,6 +310,7 @@ Authorization: Bearer <access_token>
 查看维修记录
 查看操作日志
 查看统计数据
+FAQ 管理
 ```
 
 ---
@@ -2095,11 +2111,357 @@ GET /api/v1/dashboard/handler-ranking
 
 ---
 
-# 14. 字典接口 Dict API
+# 14. FAQ 常见问题 API
+
+FAQ 用于维护企业内部 IT 常见问题，例如电脑无法联网、打印机卡纸、账号无法登录、ERP 系统异常等。普通员工可以查看启用状态 FAQ，减少重复报修；管理员可以在后台新增、修改、停用、删除 FAQ。
+
+对应数据库表：
+
+```text
+it_faq
+```
+
+## 14.1 查询 FAQ 列表
+
+```http
+GET /api/v1/faqs
+```
+
+权限：admin、it_staff、employee
+
+查询参数：
+
+| 参数        | 类型     | 必填 | 说明                                             |
+| --------- | ------ | -- | ---------------------------------------------- |
+| keyword   | string | 否  | 按标题、摘要、内容模糊查询                                  |
+| category  | string | 否  | computer / network / printer / account / other |
+| status    | int    | 否  | 状态：1启用，0停用                                     |
+| page      | int    | 否  | 当前页码，默认 1                                      |
+| page_size | int    | 否  | 每页数量，默认 10，最大 100                              |
+
+请求示例：
+
+```http
+GET /api/v1/faqs?keyword=打印机&category=printer&page=1&page_size=10
+```
+
+权限过滤规则：
+
+```text
+1. admin 可以查看全部 FAQ，包括启用和停用；
+2. it_staff 可以查看全部 FAQ；
+3. employee 只能查看 status = 1 的 FAQ；
+4. 如果 employee 传入 status = 0，后端忽略该参数并只返回启用 FAQ。
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "title": "打印机卡纸应该如何处理？",
+        "category": "printer",
+        "category_name": "打印机问题",
+        "summary": "打印机卡纸时的基础处理步骤",
+        "view_count": 28,
+        "sort_order": 1,
+        "status": 1,
+        "created_at": "2026-06-21 08:00:00",
+        "updated_at": "2026-06-21 08:00:00"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 10,
+    "pages": 1
+  }
+}
+```
+
+业务规则：
+
+```text
+1. 按 sort_order ASC、created_at DESC 排序；
+2. keyword 同时匹配 title、summary、content；
+3. employee 只能看到启用状态 FAQ；
+4. 列表接口不返回 content 全文，避免数据过大；
+5. 查询列表不增加 view_count。
+```
+
+---
+
+## 14.2 创建 FAQ
+
+```http
+POST /api/v1/faqs
+```
+
+权限：admin
+
+请求参数：
+
+```json
+{
+  "title": "打印机卡纸应该如何处理？",
+  "category": "printer",
+  "summary": "打印机卡纸时的基础处理步骤",
+  "content": "1. 先停止打印任务；2. 打开打印机后盖；3. 按照纸张方向缓慢取出卡纸；4. 检查纸盒纸张是否受潮；5. 如果仍无法恢复，请提交 IT 报修工单。",
+  "sort_order": 1,
+  "status": 1
+}
+```
+
+字段说明：
+
+| 字段         | 类型     | 必填 | 说明              |
+| ---------- | ------ | -- | --------------- |
+| title      | string | 是  | 问题标题，最大 200 字符  |
+| category   | string | 是  | FAQ 分类          |
+| summary    | string | 否  | 问题摘要，最大 255 字符  |
+| content    | string | 是  | 问题详细内容          |
+| sort_order | int    | 否  | 排序值，越小越靠前，默认 0  |
+| status     | int    | 否  | 状态：1启用，0停用，默认 1 |
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "FAQ 创建成功",
+  "data": {
+    "id": 1
+  }
+}
+```
+
+业务规则：
+
+```text
+1. title 不允许为空；
+2. content 不允许为空；
+3. category 必须是 computer、network、printer、account、other 之一；
+4. status 只能是 1 或 0；
+5. view_count 创建时默认为 0；
+6. 创建成功后记录操作日志。
+```
+
+---
+
+## 14.3 查询 FAQ 详情
+
+```http
+GET /api/v1/faqs/{faq_id}
+```
+
+权限：admin、it_staff、employee
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": 1,
+    "title": "打印机卡纸应该如何处理？",
+    "category": "printer",
+    "category_name": "打印机问题",
+    "summary": "打印机卡纸时的基础处理步骤",
+    "content": "1. 先停止打印任务；2. 打开打印机后盖；3. 按照纸张方向缓慢取出卡纸；4. 检查纸盒纸张是否受潮；5. 如果仍无法恢复，请提交 IT 报修工单。",
+    "view_count": 29,
+    "sort_order": 1,
+    "status": 1,
+    "created_at": "2026-06-21 08:00:00",
+    "updated_at": "2026-06-21 08:00:00"
+  }
+}
+```
+
+业务规则：
+
+```text
+1. FAQ 不存在，返回 404；
+2. employee 查询 status = 0 的 FAQ 时返回 404；
+3. 查询详情成功后，view_count 自动加 1；
+4. 第一版 admin、it_staff 查询详情也统一增加 view_count。
+```
+
+---
+
+## 14.4 修改 FAQ
+
+```http
+PUT /api/v1/faqs/{faq_id}
+```
+
+权限：admin
+
+请求参数：
+
+```json
+{
+  "title": "打印机卡纸如何处理？",
+  "category": "printer",
+  "summary": "打印机卡纸的常见处理方法",
+  "content": "1. 取消当前打印任务；2. 打开打印机后盖；3. 按纸张出纸方向取出卡纸；4. 检查纸盒纸张是否受潮或变形；5. 无法解决时提交 IT 报修。",
+  "sort_order": 1,
+  "status": 1
+}
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "FAQ 修改成功",
+  "data": null
+}
+```
+
+业务规则：
+
+```text
+1. FAQ 不存在，返回 404；
+2. category 必须合法；
+3. status 只能是 1 或 0；
+4. 不通过该接口修改 view_count；
+5. 修改成功后记录操作日志。
+```
+
+---
+
+## 14.5 修改 FAQ 状态
+
+```http
+PATCH /api/v1/faqs/{faq_id}/status
+```
+
+权限：admin
+
+请求参数：
+
+```json
+{
+  "status": 0
+}
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "FAQ 状态修改成功",
+  "data": null
+}
+```
+
+业务规则：
+
+```text
+1. status 只能是 1 或 0；
+2. status = 1 表示启用；
+3. status = 0 表示停用；
+4. 停用后的 FAQ 普通员工不可见；
+5. 修改成功后记录操作日志。
+```
+
+---
+
+## 14.6 删除 FAQ
+
+```http
+DELETE /api/v1/faqs/{faq_id}
+```
+
+权限：admin
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "FAQ 删除成功",
+  "data": null
+}
+```
+
+业务规则：
+
+```text
+1. FAQ 不存在，返回 404；
+2. 第一版可以物理删除；
+3. 更推荐通过 status = 0 停用 FAQ；
+4. 删除成功后记录操作日志。
+```
+
+---
+
+## 14.7 查询 FAQ 分类数量
+
+```http
+GET /api/v1/faqs/category-stats
+```
+
+权限：admin、it_staff、employee
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": [
+    {
+      "category": "computer",
+      "category_name": "电脑问题",
+      "count": 6
+    },
+    {
+      "category": "network",
+      "category_name": "网络问题",
+      "count": 3
+    },
+    {
+      "category": "printer",
+      "category_name": "打印机问题",
+      "count": 5
+    },
+    {
+      "category": "account",
+      "category_name": "账号系统问题",
+      "count": 4
+    },
+    {
+      "category": "other",
+      "category_name": "其他问题",
+      "count": 2
+    }
+  ]
+}
+```
+
+业务规则：
+
+```text
+1. employee 只统计 status = 1 的 FAQ；
+2. admin、it_staff 可统计全部 FAQ；
+3. 按固定分类顺序返回：computer、network、printer、account、other。
+```
+
+---
+
+# 15. 字典接口 Dict API
 
 为了方便前端渲染下拉框，提供统一字典接口。
 
-## 14.1 查询所有字典
+## 15.1 查询所有字典
 
 ```http
 GET /api/v1/dicts
@@ -2211,6 +2573,28 @@ GET /api/v1/dicts
         "label": "已报废",
         "value": "scrapped"
       }
+    ],
+    "faq_category": [
+      {
+        "label": "电脑问题",
+        "value": "computer"
+      },
+      {
+        "label": "网络问题",
+        "value": "network"
+      },
+      {
+        "label": "打印机问题",
+        "value": "printer"
+      },
+      {
+        "label": "账号系统问题",
+        "value": "account"
+      },
+      {
+        "label": "其他问题",
+        "value": "other"
+      }
     ]
   }
 }
@@ -2218,7 +2602,7 @@ GET /api/v1/dicts
 
 ---
 
-# 15. 工单状态流转规则
+# 16. 工单状态流转规则
 
 工单状态只能按照以下规则流转：
 
@@ -2252,9 +2636,9 @@ processing -> cancelled
 
 ---
 
-# 16. 后端实现要求
+# 17. 后端实现要求
 
-## 16.1 FastAPI 路由建议
+## 17.1 FastAPI 路由建议
 
 建议拆分以下 router：
 
@@ -2268,11 +2652,12 @@ app/api/v1/routers/repair_records.py
 app/api/v1/routers/operation_logs.py
 app/api/v1/routers/dashboard.py
 app/api/v1/routers/dicts.py
+app/api/v1/routers/faqs.py
 ```
 
 ---
 
-## 16.2 Service 层建议
+## 17.2 Service 层建议
 
 建议拆分以下 service：
 
@@ -2284,11 +2669,12 @@ app/services/ticket_service.py
 app/services/repair_service.py
 app/services/log_service.py
 app/services/dashboard_service.py
+app/services/faq_service.py
 ```
 
 ---
 
-## 16.3 数据模型建议
+## 17.3 数据模型建议
 
 建议拆分以下 model：
 
@@ -2300,11 +2686,12 @@ app/models/ticket.py
 app/models/ticket_record.py
 app/models/repair_record.py
 app/models/operation_log.py
+app/models/faq.py
 ```
 
 ---
 
-## 16.4 Pydantic Schema 建议
+## 17.4 Pydantic Schema 建议
 
 建议拆分以下 schema：
 
@@ -2315,11 +2702,12 @@ app/schemas/asset_schema.py
 app/schemas/ticket_schema.py
 app/schemas/repair_schema.py
 app/schemas/common_schema.py
+app/schemas/faq_schema.py
 ```
 
 ---
 
-## 16.5 统一响应工具
+## 17.5 统一响应工具
 
 请封装统一响应方法：
 
@@ -2341,7 +2729,7 @@ def fail(code=40000, message="操作失败", data=None):
 
 ---
 
-## 16.6 权限校验要求
+## 17.6 权限校验要求
 
 需要实现依赖函数：
 
@@ -2359,7 +2747,7 @@ require_roles("admin", "it_staff")
 
 ---
 
-## 16.7 操作日志要求
+## 17.7 操作日志要求
 
 以下操作必须写入 sys_operation_log：
 
@@ -2378,6 +2766,10 @@ require_roles("admin", "it_staff")
 完成工单
 取消工单
 修改维修记录
+创建 FAQ
+修改 FAQ
+修改 FAQ 状态
+删除 FAQ
 ```
 
 日志字段：
@@ -2397,88 +2789,3 @@ created_at
 
 ---
 
-# 17. 第一版必须实现的接口清单
-
-Codex 第一阶段必须完整实现以下接口：
-
-```text
-POST   /api/v1/auth/login
-GET    /api/v1/auth/me
-PUT    /api/v1/auth/password
-
-GET    /api/v1/users
-POST   /api/v1/users
-GET    /api/v1/users/{user_id}
-PUT    /api/v1/users/{user_id}
-PATCH  /api/v1/users/{user_id}/status
-PATCH  /api/v1/users/{user_id}/password
-DELETE /api/v1/users/{user_id}
-
-GET    /api/v1/asset-categories
-POST   /api/v1/asset-categories
-GET    /api/v1/asset-categories/{category_id}
-PUT    /api/v1/asset-categories/{category_id}
-DELETE /api/v1/asset-categories/{category_id}
-
-GET    /api/v1/assets
-POST   /api/v1/assets
-GET    /api/v1/assets/{asset_id}
-PUT    /api/v1/assets/{asset_id}
-PATCH  /api/v1/assets/{asset_id}/status
-DELETE /api/v1/assets/{asset_id}
-GET    /api/v1/assets/{asset_id}/repair-records
-
-GET    /api/v1/tickets
-POST   /api/v1/tickets
-GET    /api/v1/tickets/{ticket_id}
-PUT    /api/v1/tickets/{ticket_id}
-PATCH  /api/v1/tickets/{ticket_id}/assign
-PATCH  /api/v1/tickets/{ticket_id}/start
-PATCH  /api/v1/tickets/{ticket_id}/complete
-PATCH  /api/v1/tickets/{ticket_id}/cancel
-DELETE /api/v1/tickets/{ticket_id}
-GET    /api/v1/tickets/{ticket_id}/records
-
-GET    /api/v1/repair-records
-GET    /api/v1/repair-records/{record_id}
-PUT    /api/v1/repair-records/{record_id}
-
-GET    /api/v1/operation-logs
-
-GET    /api/v1/dashboard/summary
-GET    /api/v1/dashboard/ticket-trend
-GET    /api/v1/dashboard/ticket-fault-types
-GET    /api/v1/dashboard/asset-status
-GET    /api/v1/dashboard/handler-ranking
-
-GET    /api/v1/dicts
-```
-
----
-
-# 18. Codex 实现补充要求
-
-请 Codex 按以下要求实现：
-
-```text
-1. 使用 FastAPI 实现所有接口；
-2. 使用 SQLAlchemy ORM 操作 MySQL；
-3. 使用 Pydantic 定义请求和响应 Schema；
-4. 所有接口统一返回 code、message、data；
-5. 登录使用 JWT Token；
-6. 密码必须使用安全哈希存储，不允许明文保存；
-7. 所有列表接口必须支持分页；
-8. 查询接口需要支持文档中定义的过滤条件；
-9. 所有涉及业务状态变更的接口必须校验状态流转是否合法；
-10. 所有关键操作必须写入 sys_operation_log；
-11. 报修工单创建、派单、开始处理、完成、取消时必须写入 it_ticket_record；
-12. 完成工单时，如果有关联资产，必须自动创建 it_repair_record；
-13. 完成工单时，需要根据维修结果自动更新资产状态；
-14. 普通员工只能查看和操作自己的工单；
-15. IT 运维人员不能管理用户；
-16. 管理员拥有全部权限；
-17. 代码结构需要分层：routers、services、models、schemas、utils；
-18. 接口需要能在 /docs 中正常显示；
-19. 所有接口需要有合理的异常处理；
-20. 不要把业务逻辑全部写在 router 中，核心逻辑放在 service 层。
-```
