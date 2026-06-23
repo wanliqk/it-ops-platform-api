@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.api.v1.deps import get_current_user
+from app.api.v1.deps import require_permissions
 from app.core.responses import success
 from app.models import User
 
@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("")
-def dicts(_: Annotated[User, Depends(get_current_user)]) -> dict:
+def dicts(_: Annotated[User, Depends(require_permissions("dict:view"))]) -> dict:
     return success(
         {
             "roles": [

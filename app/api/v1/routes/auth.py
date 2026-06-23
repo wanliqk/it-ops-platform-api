@@ -15,6 +15,7 @@ from app.schemas.user import UserPasswordChange
 from app.services.auth_service import AuthService
 from app.services.log_service import LogService
 from app.services.user_service import UserService
+from app.utils.permissions import get_user_permission_codes, get_user_role_codes
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -49,8 +50,11 @@ def login(payload: LoginRequest, db: DBSession, request: Request) -> dict:
 
 
 @router.get("/me")
-def me(current_user: Annotated[User, Depends(get_current_user)]) -> dict:
-    return success(user_dict(current_user))
+def me(db: DBSession, current_user: Annotated[User, Depends(get_current_user)]) -> dict:
+    data = user_dict(current_user)
+    data["roles"] = sorted(get_user_role_codes(db, current_user.id))
+    data["permissions"] = sorted(get_user_permission_codes(db, current_user.id))
+    return success(data)
 
 
 @router.put("/password")

@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.api.v1.deps import DBSession, require_roles
+from app.api.v1.deps import DBSession, require_permissions
 from app.api.v1.routes._serializers import category_dict
 from app.core.responses import APIException, success
 from app.models import User
@@ -11,14 +11,16 @@ from app.services.asset_service import AssetCategoryService
 from app.services.log_service import LogService
 
 router = APIRouter()
-AssetReader = Annotated[User, Depends(require_roles("admin", "it_staff"))]
-AdminUser = Annotated[User, Depends(require_roles("admin"))]
+AssetCategoryReader = Annotated[User, Depends(require_permissions("asset_category:view"))]
+AssetCategoryCreator = Annotated[User, Depends(require_permissions("asset_category:create"))]
+AssetCategoryUpdater = Annotated[User, Depends(require_permissions("asset_category:update"))]
+AssetCategoryDeleter = Annotated[User, Depends(require_permissions("asset_category:delete"))]
 
 
 @router.get("")
 def list_asset_categories(
     db: DBSession,
-    _: AssetReader,
+    _: AssetCategoryReader,
     keyword: str | None = None,
     status_value: Annotated[int | None, Query(alias="status")] = None,
 ) -> dict:
@@ -31,7 +33,7 @@ def create_asset_category(
     payload: AssetCategoryCreate,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: AssetCategoryCreator,
 ) -> dict:
     service = AssetCategoryService(db)
     if service.get_by_code(payload.category_code):
@@ -49,7 +51,7 @@ def create_asset_category(
 
 
 @router.get("/{category_id}")
-def get_asset_category(category_id: int, db: DBSession, _: AssetReader) -> dict:
+def get_asset_category(category_id: int, db: DBSession, _: AssetCategoryReader) -> dict:
     category = AssetCategoryService(db).get(category_id)
     if category is None:
         raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
@@ -62,7 +64,7 @@ def update_asset_category(
     payload: AssetCategoryUpdate,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: AssetCategoryUpdater,
 ) -> dict:
     category = AssetCategoryService(db).update(category_id, payload)
     if category is None:
@@ -83,7 +85,7 @@ def delete_asset_category(
     category_id: int,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: AssetCategoryDeleter,
 ) -> dict:
     service = AssetCategoryService(db)
     if service.get(category_id) is None:

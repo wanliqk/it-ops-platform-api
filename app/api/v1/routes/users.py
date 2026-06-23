@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.api.v1.deps import DBSession, require_roles
+from app.api.v1.deps import DBSession, require_permissions
 from app.api.v1.routes._serializers import user_dict
 from app.core.responses import APIException, success
 from app.models import User
@@ -12,13 +12,18 @@ from app.services.log_service import LogService
 from app.services.user_service import UserService
 
 router = APIRouter()
-AdminUser = Annotated[User, Depends(require_roles("admin"))]
+UserReader = Annotated[User, Depends(require_permissions("user:view"))]
+UserCreator = Annotated[User, Depends(require_permissions("user:create"))]
+UserUpdater = Annotated[User, Depends(require_permissions("user:update"))]
+UserStatusUpdater = Annotated[User, Depends(require_permissions("user:status"))]
+UserPasswordResetter = Annotated[User, Depends(require_permissions("user:reset_password"))]
+UserDeleter = Annotated[User, Depends(require_permissions("user:delete"))]
 
 
 @router.get("")
 def list_users(
     db: DBSession,
-    _: AdminUser,
+    _: UserReader,
     keyword: str | None = None,
     role: str | None = None,
     status_value: Annotated[int | None, Query(alias="status")] = None,
@@ -42,7 +47,7 @@ def create_user(
     payload: UserCreate,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: UserCreator,
 ) -> dict:
     service = UserService(db)
     if service.get_by_username(payload.username):
@@ -60,7 +65,7 @@ def create_user(
 
 
 @router.get("/{user_id}")
-def get_user(user_id: int, db: DBSession, _: AdminUser) -> dict:
+def get_user(user_id: int, db: DBSession, _: UserReader) -> dict:
     user = UserService(db).get(user_id)
     if user is None:
         raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
@@ -73,7 +78,7 @@ def update_user(
     payload: UserUpdate,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: UserUpdater,
 ) -> dict:
     user = UserService(db).update(user_id, payload)
     if user is None:
@@ -95,7 +100,7 @@ def update_user_status(
     payload: UserStatusUpdate,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: UserStatusUpdater,
 ) -> dict:
     if payload.status not in {0, 1}:
         raise APIException("status 只能为 1 或 0", status.HTTP_400_BAD_REQUEST, 40000)
@@ -121,7 +126,7 @@ def reset_user_password(
     payload: UserPasswordReset,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: UserPasswordResetter,
 ) -> dict:
     if len(payload.new_password) < 6:
         raise APIException("新密码长度至少 6 位", status.HTTP_400_BAD_REQUEST, 40000)
@@ -140,7 +145,7 @@ def reset_user_password(
 
 
 @router.delete("/{user_id}")
-def delete_user(user_id: int, db: DBSession, request: Request, current_user: AdminUser) -> dict:
+def delete_user(user_id: int, db: DBSession, request: Request, current_user: UserDeleter) -> dict:
     service = UserService(db)
     if user_id == current_user.id:
         raise APIException("不允许删除当前登录用户", status.HTTP_409_CONFLICT, 40900)

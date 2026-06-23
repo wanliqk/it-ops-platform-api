@@ -1,6 +1,7 @@
 from app.models.asset import Asset, AssetCategory, AssetStatus
 from app.models.faq import Faq, FaqCategory
 from app.models.operation_log import OperationLog, OperationResult
+from app.models.rbac import SysPermission, SysRole, SysRolePermission, SysUserRole
 from app.models.ticket import (
     RepairRecord,
     RepairResult,
@@ -23,6 +24,10 @@ __all__ = [
     "OperationResult",
     "RepairRecord",
     "RepairResult",
+    "SysPermission",
+    "SysRole",
+    "SysRolePermission",
+    "SysUserRole",
     "Ticket",
     "TicketAction",
     "TicketFaultType",

@@ -3,8 +3,9 @@ from __future__ import annotations
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import Faq, FaqCategory, User, UserRole
+from app.models import Faq, FaqCategory, User
 from app.schemas.faq import FaqCreate, FaqUpdate
+from app.utils.permissions import get_user_permission_codes
 
 FAQ_CATEGORY_NAMES = {
     FaqCategory.COMPUTER.value: "电脑问题",
@@ -37,7 +38,7 @@ class FaqService:
         page_size: int = 10,
     ) -> tuple[list[Faq], int]:
         stmt = select(Faq)
-        if current_user.role == UserRole.EMPLOYEE:
+        if not self._can_manage_faq(current_user):
             stmt = stmt.where(Faq.status == 1)
         elif status is not None:
             stmt = stmt.where(Faq.status == status)
@@ -79,7 +80,7 @@ class FaqService:
         faq = self.get(faq_id)
         if faq is None:
             return None
-        if current_user.role == UserRole.EMPLOYEE and faq.status != 1:
+        if not self._can_manage_faq(current_user) and faq.status != 1:
             return None
         faq.view_count += 1
         self.db.commit()
@@ -117,7 +118,7 @@ class FaqService:
 
     def category_stats(self, current_user: User) -> list[dict[str, int | str]]:
         stmt = select(Faq.category, func.count(Faq.id)).group_by(Faq.category)
-        if current_user.role == UserRole.EMPLOYEE:
+        if not self._can_manage_faq(current_user):
             stmt = stmt.where(Faq.status == 1)
         counts = {str(category): count for category, count in self.db.execute(stmt).all()}
         return [
@@ -128,3 +129,9 @@ class FaqService:
             }
             for category in FAQ_CATEGORY_ORDER
         ]
+
+    def _can_manage_faq(self, current_user: User) -> bool:
+        return bool(
+            get_user_permission_codes(self.db, current_user.id)
+            & {"faq:create", "faq:update", "faq:status", "faq:delete"}
+        )

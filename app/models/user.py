@@ -46,3 +46,4 @@ class User(Base):
     ticket_records = relationship("TicketRecord", back_populates="operator")
     repair_records = relationship("RepairRecord", back_populates="repair_user")
     operation_logs = relationship("OperationLog", back_populates="user")
+    user_roles = relationship("SysUserRole", back_populates="user")

@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.api.v1.deps import DBSession, require_roles
+from app.api.v1.deps import DBSession, require_permissions
 from app.api.v1.routes._serializers import repair_record_dict
 from app.core.responses import APIException, success
 from app.models import User
@@ -13,8 +13,8 @@ from app.services.log_service import LogService
 from app.services.repair_service import RepairService
 
 router = APIRouter()
-RepairReader = Annotated[User, Depends(require_roles("admin", "it_staff"))]
-AdminUser = Annotated[User, Depends(require_roles("admin"))]
+RepairReader = Annotated[User, Depends(require_permissions("repair_record:view"))]
+RepairUpdater = Annotated[User, Depends(require_permissions("repair_record:update"))]
 
 
 @router.get("")
@@ -57,7 +57,7 @@ def update_repair_record(
     payload: RepairRecordUpdate,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: RepairUpdater,
 ) -> dict:
     record = RepairService(db).update(record_id, payload)
     if record is None:

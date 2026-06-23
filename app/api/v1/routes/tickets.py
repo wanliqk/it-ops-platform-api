@@ -2,10 +2,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.api.v1.deps import DBSession, get_current_user, require_roles
+from app.api.v1.deps import DBSession, require_permissions
 from app.api.v1.routes._serializers import ticket_dict, ticket_record_dict
 from app.core.responses import APIException, success
-from app.models import User, UserRole
+from app.models import User
 from app.schemas.common import page_data
 from app.schemas.ticket import (
     TicketAssign,
@@ -17,16 +17,27 @@ from app.schemas.ticket import (
 )
 from app.services.log_service import LogService
 from app.services.ticket_service import TicketConflictError, TicketService
+from app.utils.permissions import get_user_role_codes
 
 router = APIRouter()
-CurrentUser = Annotated[User, Depends(get_current_user)]
-AdminUser = Annotated[User, Depends(require_roles("admin"))]
+TicketReader = Annotated[
+    User,
+    Depends(require_permissions("ticket:view_all", "ticket:view_self", require_all=False)),
+]
+TicketCreator = Annotated[User, Depends(require_permissions("ticket:create"))]
+TicketUpdater = Annotated[User, Depends(require_permissions("ticket:update"))]
+TicketAssigner = Annotated[User, Depends(require_permissions("ticket:assign"))]
+TicketStarter = Annotated[User, Depends(require_permissions("ticket:start"))]
+TicketCompleter = Annotated[User, Depends(require_permissions("ticket:complete"))]
+TicketCanceller = Annotated[User, Depends(require_permissions("ticket:cancel"))]
+TicketDeleter = Annotated[User, Depends(require_permissions("ticket:delete"))]
+TicketRecordReader = Annotated[User, Depends(require_permissions("ticket:records"))]
 
 
 @router.get("")
 def list_tickets(
     db: DBSession,
-    current_user: CurrentUser,
+    current_user: TicketReader,
     keyword: str | None = None,
     status_value: Annotated[str | None, Query(alias="status")] = None,
     fault_type: str | None = None,
@@ -57,11 +68,9 @@ def create_ticket(
     payload: TicketCreate,
     db: DBSession,
     request: Request,
-    current_user: CurrentUser,
+    current_user: TicketCreator,
 ) -> dict:
-    if current_user.role == UserRole.EMPLOYEE:
-        payload.reporter_id = current_user.id
-    elif payload.reporter_id is None:
+    if "admin" not in get_user_role_codes(db, current_user.id) or payload.reporter_id is None:
         payload.reporter_id = current_user.id
     ticket = TicketService(db).create(payload)
     LogService(db).record(
@@ -76,7 +85,7 @@ def create_ticket(
 
 
 @router.get("/{ticket_id}")
-def get_ticket(ticket_id: int, db: DBSession, current_user: CurrentUser) -> dict:
+def get_ticket(ticket_id: int, db: DBSession, current_user: TicketReader) -> dict:
     service = TicketService(db)
     ticket = service.get(ticket_id)
     if ticket is None:
@@ -92,15 +101,13 @@ def update_ticket(
     payload: TicketUpdate,
     db: DBSession,
     request: Request,
-    current_user: CurrentUser,
+    current_user: TicketUpdater,
 ) -> dict:
     service = TicketService(db)
     ticket = service.get(ticket_id)
     if ticket is None:
         raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
-    if current_user.role == UserRole.EMPLOYEE and ticket.reporter_id != current_user.id:
-        raise APIException("无权限操作", status.HTTP_403_FORBIDDEN, 40300)
-    if current_user.role == UserRole.EMPLOYEE and ticket.status != "pending":
+    if not service.can_update(ticket, current_user):
         raise APIException("当前工单状态不允许执行该操作", status.HTTP_409_CONFLICT, 40900)
     updated = service.update(ticket_id, payload)
     LogService(db).record(
@@ -120,7 +127,7 @@ def assign_ticket(
     payload: TicketAssign,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: TicketAssigner,
 ) -> dict:
     try:
         ticket = TicketService(db).assign(ticket_id, payload, current_user.id)
@@ -148,7 +155,7 @@ def start_ticket(
     payload: TicketStart,
     db: DBSession,
     request: Request,
-    current_user: Annotated[User, Depends(require_roles("admin", "it_staff"))],
+    current_user: TicketStarter,
 ) -> dict:
     try:
         ticket = TicketService(db).start(ticket_id, payload, current_user)
@@ -178,7 +185,7 @@ def complete_ticket(
     payload: TicketComplete,
     db: DBSession,
     request: Request,
-    current_user: Annotated[User, Depends(require_roles("admin", "it_staff"))],
+    current_user: TicketCompleter,
 ) -> dict:
     try:
         ticket = TicketService(db).complete(ticket_id, payload, current_user)
@@ -208,7 +215,7 @@ def cancel_ticket(
     payload: TicketCancel,
     db: DBSession,
     request: Request,
-    current_user: CurrentUser,
+    current_user: TicketCanceller,
 ) -> dict:
     try:
         ticket = TicketService(db).cancel(ticket_id, payload, current_user)
@@ -230,18 +237,31 @@ def cancel_ticket(
 
 
 @router.delete("/{ticket_id}")
-def delete_ticket(ticket_id: int, db: DBSession, _: AdminUser) -> dict:
+def delete_ticket(
+    ticket_id: int,
+    db: DBSession,
+    request: Request,
+    current_user: TicketDeleter,
+) -> dict:
     try:
         deleted = TicketService(db).delete(ticket_id)
     except TicketConflictError as exc:
         raise APIException("当前工单状态不允许执行该操作", status.HTTP_409_CONFLICT, 40900) from exc
     if not deleted:
         raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    LogService(db).record(
+        user_id=current_user.id,
+        module_name="工单管理",
+        operation_type="delete",
+        business_id=ticket_id,
+        request=request,
+    )
+    db.commit()
     return success(None, "工单删除成功")
 
 
 @router.get("/{ticket_id}/records")
-def ticket_records(ticket_id: int, db: DBSession, current_user: CurrentUser) -> dict:
+def ticket_records(ticket_id: int, db: DBSession, current_user: TicketRecordReader) -> dict:
     service = TicketService(db)
     ticket = service.get(ticket_id)
     if ticket is None:

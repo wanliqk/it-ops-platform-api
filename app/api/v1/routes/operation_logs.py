@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.v1.deps import DBSession, require_roles
+from app.api.v1.deps import DBSession, require_permissions
 from app.api.v1.routes._serializers import operation_log_dict
 from app.core.responses import success
 from app.models import User
@@ -11,13 +11,13 @@ from app.schemas.common import page_data
 from app.services.operation_log_service import OperationLogService
 
 router = APIRouter()
-AdminUser = Annotated[User, Depends(require_roles("admin"))]
+OperationLogReader = Annotated[User, Depends(require_permissions("operation_log:view"))]
 
 
 @router.get("")
 def list_operation_logs(
     db: DBSession,
-    _: AdminUser,
+    _: OperationLogReader,
     user_id: int | None = None,
     module_name: str | None = None,
     operation_type: str | None = None,

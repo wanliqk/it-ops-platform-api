@@ -15,7 +15,6 @@ from app.models import (
     TicketRecord,
     TicketStatus,
     User,
-    UserRole,
 )
 from app.schemas.ticket import (
     TicketAssign,
@@ -25,6 +24,7 @@ from app.schemas.ticket import (
     TicketStart,
     TicketUpdate,
 )
+from app.utils.permissions import get_user_permission_codes, get_user_role_codes
 
 
 class TicketConflictError(Exception):
@@ -73,7 +73,8 @@ class TicketService:
         page_size: int = 10,
     ) -> tuple[list[Ticket], int]:
         stmt = select(Ticket)
-        if current_user.role == UserRole.EMPLOYEE:
+        permission_codes = get_user_permission_codes(self.db, current_user.id)
+        if "ticket:view_all" not in permission_codes:
             stmt = stmt.where(Ticket.reporter_id == current_user.id)
         if keyword:
             like = f"%{keyword}%"
@@ -151,7 +152,7 @@ class TicketService:
         if ticket is None:
             return None
         self._ensure_status(ticket.status, TicketStatus.ASSIGNED)
-        if operator.role == UserRole.IT_STAFF and ticket.handler_id not in {None, operator.id}:
+        if not self._is_admin(operator) and ticket.handler_id not in {None, operator.id}:
             raise PermissionError
         if ticket.handler_id is None:
             ticket.handler_id = operator.id
@@ -174,7 +175,7 @@ class TicketService:
         if ticket is None:
             return None
         self._ensure_status(ticket.status, TicketStatus.PROCESSING)
-        if operator.role == UserRole.IT_STAFF and ticket.handler_id != operator.id:
+        if not self._is_admin(operator) and ticket.handler_id != operator.id:
             raise PermissionError
         now = datetime.now(UTC)
         ticket.status = TicketStatus.COMPLETED
@@ -213,7 +214,7 @@ class TicketService:
         ticket = self.get(ticket_id)
         if ticket is None:
             return None
-        if operator.role == UserRole.ADMIN:
+        if self._is_admin(operator):
             if ticket.status not in {TicketStatus.PENDING, TicketStatus.ASSIGNED}:
                 raise TicketConflictError
         elif ticket.reporter_id == operator.id:
@@ -259,10 +260,18 @@ class TicketService:
         return True
 
     def can_access(self, ticket: Ticket, user: User) -> bool:
-        return (
-            user.role in {UserRole.ADMIN, UserRole.IT_STAFF}
-            or ticket.reporter_id == user.id
+        permission_codes = get_user_permission_codes(self.db, user.id)
+        return "ticket:view_all" in permission_codes or (
+            "ticket:view_self" in permission_codes and ticket.reporter_id == user.id
         )
+
+    def can_update(self, ticket: Ticket, user: User) -> bool:
+        if self._is_admin(user):
+            return True
+        return ticket.reporter_id == user.id and ticket.status == TicketStatus.PENDING
+
+    def _is_admin(self, user: User) -> bool:
+        return "admin" in get_user_role_codes(self.db, user.id)
 
     def _generate_ticket_no(self) -> str:
         today = datetime.now(UTC).strftime("%Y%m%d")

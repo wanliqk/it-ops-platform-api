@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.api.v1.deps import DBSession, require_roles
+from app.api.v1.deps import DBSession, require_permissions
 from app.api.v1.routes._serializers import asset_dict, repair_record_dict
 from app.core.responses import APIException, success
 from app.models import User
@@ -13,8 +13,12 @@ from app.services.log_service import LogService
 from app.services.repair_service import RepairService
 
 router = APIRouter()
-AssetReader = Annotated[User, Depends(require_roles("admin", "it_staff"))]
-AdminUser = Annotated[User, Depends(require_roles("admin"))]
+AssetReader = Annotated[User, Depends(require_permissions("asset:view"))]
+AssetCreator = Annotated[User, Depends(require_permissions("asset:create"))]
+AssetUpdater = Annotated[User, Depends(require_permissions("asset:update"))]
+AssetStatusUpdater = Annotated[User, Depends(require_permissions("asset:status"))]
+AssetDeleter = Annotated[User, Depends(require_permissions("asset:delete"))]
+AssetRepairReader = Annotated[User, Depends(require_permissions("asset:repair_records"))]
 
 
 @router.get("")
@@ -46,7 +50,7 @@ def create_asset(
     payload: AssetCreate,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: AssetCreator,
 ) -> dict:
     service = AssetService(db)
     if service.get_by_asset_no(payload.asset_no):
@@ -81,7 +85,7 @@ def update_asset(
     payload: AssetUpdate,
     db: DBSession,
     request: Request,
-    current_user: AdminUser,
+    current_user: AssetUpdater,
 ) -> dict:
     service = AssetService(db)
     if payload.category_id is not None and not service.category_exists(payload.category_id):
@@ -108,7 +112,7 @@ def update_asset_status(
     payload: AssetStatusUpdate,
     db: DBSession,
     request: Request,
-    current_user: AssetReader,
+    current_user: AssetStatusUpdater,
 ) -> dict:
     asset = AssetService(db).update_status(asset_id, payload.status, payload.remark)
     if asset is None:
@@ -125,7 +129,12 @@ def update_asset_status(
 
 
 @router.delete("/{asset_id}")
-def delete_asset(asset_id: int, db: DBSession, request: Request, current_user: AdminUser) -> dict:
+def delete_asset(
+    asset_id: int,
+    db: DBSession,
+    request: Request,
+    current_user: AssetDeleter,
+) -> dict:
     service = AssetService(db)
     if service.get(asset_id) is None:
         raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
@@ -147,7 +156,7 @@ def delete_asset(asset_id: int, db: DBSession, request: Request, current_user: A
 def asset_repair_records(
     asset_id: int,
     db: DBSession,
-    _: AssetReader,
+    _: AssetRepairReader,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> dict:

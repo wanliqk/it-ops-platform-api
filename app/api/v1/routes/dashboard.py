@@ -3,13 +3,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.v1.deps import DBSession, require_roles
+from app.api.v1.deps import DBSession, require_permissions
 from app.core.responses import success
 from app.models import User
 from app.services.dashboard_service import DashboardService
 
 router = APIRouter()
-DashboardUser = Annotated[User, Depends(require_roles("admin", "it_staff"))]
+DashboardUser = Annotated[User, Depends(require_permissions("dashboard:view"))]
 
 
 @router.get("/summary")
