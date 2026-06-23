@@ -1,34 +1,251 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.db.session import get_db
-from app.schemas.ticket import TicketCreate, TicketRead, TicketUpdate
-from app.services.ticket_service import TicketService
+from app.api.v1.deps import DBSession, get_current_user, require_roles
+from app.api.v1.routes._serializers import ticket_dict, ticket_record_dict
+from app.core.responses import APIException, success
+from app.models import User, UserRole
+from app.schemas.common import page_data
+from app.schemas.ticket import (
+    TicketAssign,
+    TicketCancel,
+    TicketComplete,
+    TicketCreate,
+    TicketStart,
+    TicketUpdate,
+)
+from app.services.log_service import LogService
+from app.services.ticket_service import TicketConflictError, TicketService
 
 router = APIRouter()
-DBSession = Annotated[Session, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
+AdminUser = Annotated[User, Depends(require_roles("admin"))]
 
 
-@router.post("", response_model=TicketRead, status_code=status.HTTP_201_CREATED)
-def create_ticket(payload: TicketCreate, db: DBSession) -> TicketRead:
-    return TicketService(db).create(payload)
+@router.get("")
+def list_tickets(
+    db: DBSession,
+    current_user: CurrentUser,
+    keyword: str | None = None,
+    status_value: Annotated[str | None, Query(alias="status")] = None,
+    fault_type: str | None = None,
+    priority: str | None = None,
+    reporter_id: int | None = None,
+    handler_id: int | None = None,
+    asset_id: int | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> dict:
+    items, total = TicketService(db).list(
+        current_user=current_user,
+        keyword=keyword,
+        status=status_value,
+        fault_type=fault_type,
+        priority=priority,
+        reporter_id=reporter_id,
+        handler_id=handler_id,
+        asset_id=asset_id,
+        page=page,
+        page_size=page_size,
+    )
+    return success(page_data([ticket_dict(item) for item in items], total, page, page_size))
 
 
-@router.get("", response_model=list[TicketRead])
-def list_tickets(db: DBSession) -> list[TicketRead]:
-    return TicketService(db).list()
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_ticket(
+    payload: TicketCreate,
+    db: DBSession,
+    request: Request,
+    current_user: CurrentUser,
+) -> dict:
+    if current_user.role == UserRole.EMPLOYEE:
+        payload.reporter_id = current_user.id
+    elif payload.reporter_id is None:
+        payload.reporter_id = current_user.id
+    ticket = TicketService(db).create(payload)
+    LogService(db).record(
+        user_id=current_user.id,
+        module_name="工单管理",
+        operation_type="create",
+        business_id=ticket.id,
+        request=request,
+    )
+    db.commit()
+    return success(ticket_dict(ticket), "工单创建成功")
 
 
-@router.patch("/{ticket_id}", response_model=TicketRead)
+@router.get("/{ticket_id}")
+def get_ticket(ticket_id: int, db: DBSession, current_user: CurrentUser) -> dict:
+    service = TicketService(db)
+    ticket = service.get(ticket_id)
+    if ticket is None:
+        raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    if not service.can_access(ticket, current_user):
+        raise APIException("无权限操作", status.HTTP_403_FORBIDDEN, 40300)
+    return success(ticket_dict(ticket))
+
+
+@router.put("/{ticket_id}")
 def update_ticket(
     ticket_id: int,
     payload: TicketUpdate,
     db: DBSession,
-) -> TicketRead:
+    request: Request,
+    current_user: CurrentUser,
+) -> dict:
     service = TicketService(db)
-    ticket = service.update(ticket_id, payload)
+    ticket = service.get(ticket_id)
     if ticket is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
-    return ticket
+        raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    if current_user.role == UserRole.EMPLOYEE and ticket.reporter_id != current_user.id:
+        raise APIException("无权限操作", status.HTTP_403_FORBIDDEN, 40300)
+    if current_user.role == UserRole.EMPLOYEE and ticket.status != "pending":
+        raise APIException("当前工单状态不允许执行该操作", status.HTTP_409_CONFLICT, 40900)
+    updated = service.update(ticket_id, payload)
+    LogService(db).record(
+        user_id=current_user.id,
+        module_name="工单管理",
+        operation_type="update",
+        business_id=ticket_id,
+        request=request,
+    )
+    db.commit()
+    return success(ticket_dict(updated), "工单修改成功")
+
+
+@router.patch("/{ticket_id}/assign")
+def assign_ticket(
+    ticket_id: int,
+    payload: TicketAssign,
+    db: DBSession,
+    request: Request,
+    current_user: AdminUser,
+) -> dict:
+    try:
+        ticket = TicketService(db).assign(ticket_id, payload, current_user.id)
+    except TicketConflictError as exc:
+        raise APIException("当前工单状态不允许执行该操作", status.HTTP_409_CONFLICT, 40900) from exc
+    if ticket is None:
+        raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    LogService(db).record(
+        user_id=current_user.id,
+        module_name="工单管理",
+        operation_type="assign",
+        business_id=ticket_id,
+        request=request,
+    )
+    db.commit()
+    return success(
+        {"id": ticket.id, "status": ticket.status, "handler_id": ticket.handler_id},
+        "工单已派单",
+    )
+
+
+@router.patch("/{ticket_id}/start")
+def start_ticket(
+    ticket_id: int,
+    payload: TicketStart,
+    db: DBSession,
+    request: Request,
+    current_user: Annotated[User, Depends(require_roles("admin", "it_staff"))],
+) -> dict:
+    try:
+        ticket = TicketService(db).start(ticket_id, payload, current_user)
+    except PermissionError as exc:
+        raise APIException("无权限操作", status.HTTP_403_FORBIDDEN, 40300) from exc
+    except TicketConflictError as exc:
+        raise APIException("当前工单状态不允许执行该操作", status.HTTP_409_CONFLICT, 40900) from exc
+    if ticket is None:
+        raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    LogService(db).record(
+        user_id=current_user.id,
+        module_name="工单管理",
+        operation_type="start",
+        business_id=ticket_id,
+        request=request,
+    )
+    db.commit()
+    return success(
+        {"id": ticket.id, "status": ticket.status, "started_at": ticket.started_at},
+        "工单已开始处理",
+    )
+
+
+@router.patch("/{ticket_id}/complete")
+def complete_ticket(
+    ticket_id: int,
+    payload: TicketComplete,
+    db: DBSession,
+    request: Request,
+    current_user: Annotated[User, Depends(require_roles("admin", "it_staff"))],
+) -> dict:
+    try:
+        ticket = TicketService(db).complete(ticket_id, payload, current_user)
+    except PermissionError as exc:
+        raise APIException("无权限操作", status.HTTP_403_FORBIDDEN, 40300) from exc
+    except (TicketConflictError, ValueError) as exc:
+        raise APIException("当前工单状态不允许执行该操作", status.HTTP_409_CONFLICT, 40900) from exc
+    if ticket is None:
+        raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    LogService(db).record(
+        user_id=current_user.id,
+        module_name="工单管理",
+        operation_type="complete",
+        business_id=ticket_id,
+        request=request,
+    )
+    db.commit()
+    return success(
+        {"id": ticket.id, "status": ticket.status, "completed_at": ticket.completed_at},
+        "工单已完成",
+    )
+
+
+@router.patch("/{ticket_id}/cancel")
+def cancel_ticket(
+    ticket_id: int,
+    payload: TicketCancel,
+    db: DBSession,
+    request: Request,
+    current_user: CurrentUser,
+) -> dict:
+    try:
+        ticket = TicketService(db).cancel(ticket_id, payload, current_user)
+    except PermissionError as exc:
+        raise APIException("无权限操作", status.HTTP_403_FORBIDDEN, 40300) from exc
+    except TicketConflictError as exc:
+        raise APIException("当前工单状态不允许执行该操作", status.HTTP_409_CONFLICT, 40900) from exc
+    if ticket is None:
+        raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    LogService(db).record(
+        user_id=current_user.id,
+        module_name="工单管理",
+        operation_type="cancel",
+        business_id=ticket_id,
+        request=request,
+    )
+    db.commit()
+    return success({"id": ticket.id, "status": ticket.status}, "工单已取消")
+
+
+@router.delete("/{ticket_id}")
+def delete_ticket(ticket_id: int, db: DBSession, _: AdminUser) -> dict:
+    try:
+        deleted = TicketService(db).delete(ticket_id)
+    except TicketConflictError as exc:
+        raise APIException("当前工单状态不允许执行该操作", status.HTTP_409_CONFLICT, 40900) from exc
+    if not deleted:
+        raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    return success(None, "工单删除成功")
+
+
+@router.get("/{ticket_id}/records")
+def ticket_records(ticket_id: int, db: DBSession, current_user: CurrentUser) -> dict:
+    service = TicketService(db)
+    ticket = service.get(ticket_id)
+    if ticket is None:
+        raise APIException("资源不存在", status.HTTP_404_NOT_FOUND, 40400)
+    if not service.can_access(ticket, current_user):
+        raise APIException("无权限操作", status.HTTP_403_FORBIDDEN, 40300)
+    return success([ticket_record_dict(record) for record in service.records(ticket_id)])

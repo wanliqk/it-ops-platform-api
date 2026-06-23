@@ -13,6 +13,7 @@ class TicketFaultType(StrEnum):
     SOFTWARE = "software"
     NETWORK = "network"
     PRINTER = "printer"
+    ACCOUNT = "account"
     OTHER = "other"
 
 

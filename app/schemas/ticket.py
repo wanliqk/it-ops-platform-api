@@ -17,7 +17,7 @@ class TicketBase(BaseModel):
     description: str
     fault_type: TicketFaultType | None = None
     priority: TicketPriority = TicketPriority.NORMAL
-    reporter_id: int
+    reporter_id: int | None = None
     handler_id: int | None = None
     asset_id: int | None = None
     result: str | None = None
@@ -39,6 +39,29 @@ class TicketUpdate(BaseModel):
     assigned_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
+
+class TicketAssign(BaseModel):
+    handler_id: int
+    remark: str | None = None
+
+
+class TicketStart(BaseModel):
+    remark: str | None = None
+
+
+class TicketComplete(BaseModel):
+    result: str
+    fault_reason: str | None = None
+    repair_method: str | None = None
+    repair_result: RepairResult
+    repair_cost: Decimal = Decimal("0.00")
+    asset_status_after_repair: str | None = None
+    remark: str | None = None
+
+
+class TicketCancel(BaseModel):
+    reason: str | None = None
 
 
 class TicketRead(TicketBase):
@@ -87,6 +110,14 @@ class RepairRecordBase(BaseModel):
 
 class RepairRecordCreate(RepairRecordBase):
     pass
+
+
+class RepairRecordUpdate(BaseModel):
+    fault_reason: str | None = None
+    repair_method: str | None = None
+    repair_result: RepairResult | None = None
+    repair_cost: Decimal | None = None
+    repaired_at: datetime | None = None
 
 
 class RepairRecordRead(RepairRecordBase):

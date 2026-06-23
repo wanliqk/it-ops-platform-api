@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from app.api.mobile.router import mobile_router
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.core.responses import MobileAPIException, error_response
+from app.core.responses import APIException, MobileAPIException, error_response, fail
 
 CORS_ALLOW_ORIGINS = [
     "http://localhost:5173",
@@ -34,6 +34,17 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=exc.status_code,
             content=error_response(exc.message, exc.code),
+        )
+
+    @app.exception_handler(APIException)
+    def api_exception_handler(
+        request: Request,
+        exc: APIException,
+    ) -> JSONResponse:
+        _ = request
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=fail(exc.code, exc.message),
         )
 
     return app

@@ -1,10 +1,34 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import Ticket, TicketAction, TicketRecord, TicketStatus
-from app.schemas.ticket import TicketCreate, TicketUpdate
+from app.models import (
+    Asset,
+    AssetStatus,
+    RepairRecord,
+    RepairResult,
+    Ticket,
+    TicketAction,
+    TicketRecord,
+    TicketStatus,
+    User,
+    UserRole,
+)
+from app.schemas.ticket import (
+    TicketAssign,
+    TicketCancel,
+    TicketComplete,
+    TicketCreate,
+    TicketStart,
+    TicketUpdate,
+)
+
+
+class TicketConflictError(Exception):
+    pass
 
 
 class TicketService:
@@ -31,8 +55,51 @@ class TicketService:
         self.db.refresh(ticket)
         return ticket
 
-    def list(self) -> list[Ticket]:
-        return list(self.db.scalars(select(Ticket).order_by(Ticket.created_at.desc())))
+    def get(self, ticket_id: int) -> Ticket | None:
+        return self.db.get(Ticket, ticket_id)
+
+    def list(
+        self,
+        *,
+        current_user: User,
+        keyword: str | None = None,
+        status: str | None = None,
+        fault_type: str | None = None,
+        priority: str | None = None,
+        reporter_id: int | None = None,
+        handler_id: int | None = None,
+        asset_id: int | None = None,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> tuple[list[Ticket], int]:
+        stmt = select(Ticket)
+        if current_user.role == UserRole.EMPLOYEE:
+            stmt = stmt.where(Ticket.reporter_id == current_user.id)
+        if keyword:
+            like = f"%{keyword}%"
+            stmt = stmt.where(or_(Ticket.ticket_no.like(like), Ticket.title.like(like)))
+        if status:
+            stmt = stmt.where(Ticket.status == status)
+        if fault_type:
+            stmt = stmt.where(Ticket.fault_type == fault_type)
+        if priority:
+            stmt = stmt.where(Ticket.priority == priority)
+        if reporter_id is not None:
+            stmt = stmt.where(Ticket.reporter_id == reporter_id)
+        if handler_id is not None:
+            stmt = stmt.where(Ticket.handler_id == handler_id)
+        if asset_id is not None:
+            stmt = stmt.where(Ticket.asset_id == asset_id)
+
+        total = len(list(self.db.scalars(stmt)))
+        items = list(
+            self.db.scalars(
+                stmt.order_by(Ticket.created_at.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        )
+        return items, total
 
     def update(self, ticket_id: int, payload: TicketUpdate) -> Ticket | None:
         ticket = self.db.get(Ticket, ticket_id)
@@ -59,6 +126,144 @@ class TicketService:
         self.db.refresh(ticket)
         return ticket
 
+    def assign(self, ticket_id: int, payload: TicketAssign, operator_id: int) -> Ticket | None:
+        ticket = self.get(ticket_id)
+        if ticket is None:
+            return None
+        self._ensure_status(ticket.status, TicketStatus.PENDING)
+        ticket.handler_id = payload.handler_id
+        ticket.status = TicketStatus.ASSIGNED
+        ticket.assigned_at = datetime.now(UTC)
+        self._add_record(
+            ticket,
+            operator_id,
+            TicketStatus.PENDING,
+            TicketStatus.ASSIGNED,
+            TicketAction.ASSIGN,
+            payload.remark,
+        )
+        self.db.commit()
+        self.db.refresh(ticket)
+        return ticket
+
+    def start(self, ticket_id: int, payload: TicketStart, operator: User) -> Ticket | None:
+        ticket = self.get(ticket_id)
+        if ticket is None:
+            return None
+        self._ensure_status(ticket.status, TicketStatus.ASSIGNED)
+        if operator.role == UserRole.IT_STAFF and ticket.handler_id not in {None, operator.id}:
+            raise PermissionError
+        if ticket.handler_id is None:
+            ticket.handler_id = operator.id
+        ticket.status = TicketStatus.PROCESSING
+        ticket.started_at = datetime.now(UTC)
+        self._add_record(
+            ticket,
+            operator.id,
+            TicketStatus.ASSIGNED,
+            TicketStatus.PROCESSING,
+            TicketAction.START,
+            payload.remark,
+        )
+        self.db.commit()
+        self.db.refresh(ticket)
+        return ticket
+
+    def complete(self, ticket_id: int, payload: TicketComplete, operator: User) -> Ticket | None:
+        ticket = self.get(ticket_id)
+        if ticket is None:
+            return None
+        self._ensure_status(ticket.status, TicketStatus.PROCESSING)
+        if operator.role == UserRole.IT_STAFF and ticket.handler_id != operator.id:
+            raise PermissionError
+        now = datetime.now(UTC)
+        ticket.status = TicketStatus.COMPLETED
+        ticket.result = payload.result
+        ticket.completed_at = now
+        if ticket.asset_id is not None:
+            repair_user_id = ticket.handler_id or operator.id
+            self.db.add(
+                RepairRecord(
+                    ticket_id=ticket.id,
+                    asset_id=ticket.asset_id,
+                    repair_user_id=repair_user_id,
+                    fault_reason=payload.fault_reason,
+                    repair_method=payload.repair_method,
+                    repair_result=payload.repair_result,
+                    repair_cost=payload.repair_cost,
+                    repaired_at=now,
+                )
+            )
+            asset = self.db.get(Asset, ticket.asset_id)
+            if asset is not None:
+                asset.status = self._asset_status_after_repair(payload)
+        self._add_record(
+            ticket,
+            operator.id,
+            TicketStatus.PROCESSING,
+            TicketStatus.COMPLETED,
+            TicketAction.FINISH,
+            payload.remark,
+        )
+        self.db.commit()
+        self.db.refresh(ticket)
+        return ticket
+
+    def cancel(self, ticket_id: int, payload: TicketCancel, operator: User) -> Ticket | None:
+        ticket = self.get(ticket_id)
+        if ticket is None:
+            return None
+        if operator.role == UserRole.ADMIN:
+            if ticket.status not in {TicketStatus.PENDING, TicketStatus.ASSIGNED}:
+                raise TicketConflictError
+        elif ticket.reporter_id == operator.id:
+            self._ensure_status(ticket.status, TicketStatus.PENDING)
+        else:
+            raise PermissionError
+        before_status = ticket.status
+        ticket.status = TicketStatus.CANCELLED
+        self._add_record(
+            ticket,
+            operator.id,
+            before_status,
+            TicketStatus.CANCELLED,
+            TicketAction.CANCEL,
+            payload.reason,
+        )
+        self.db.commit()
+        self.db.refresh(ticket)
+        return ticket
+
+    def records(self, ticket_id: int) -> list[TicketRecord]:
+        return list(
+            self.db.scalars(
+                select(TicketRecord)
+                .where(TicketRecord.ticket_id == ticket_id)
+                .order_by(TicketRecord.created_at.asc())
+            )
+        )
+
+    def delete(self, ticket_id: int) -> bool:
+        ticket = self.get(ticket_id)
+        if ticket is None:
+            return False
+        if ticket.status not in {TicketStatus.PENDING, TicketStatus.CANCELLED}:
+            raise TicketConflictError
+        has_repair = self.db.scalar(
+            select(RepairRecord.id).where(RepairRecord.ticket_id == ticket_id).limit(1)
+        )
+        if has_repair is not None:
+            raise TicketConflictError
+        self.db.delete(ticket)
+        self.db.commit()
+        return True
+
+    def can_access(self, ticket: Ticket, user: User) -> bool:
+        return (
+            user.role in {UserRole.ADMIN, UserRole.IT_STAFF}
+            or ticket.reporter_id == user.id
+        )
+
     def _generate_ticket_no(self) -> str:
         today = datetime.now(UTC).strftime("%Y%m%d")
         prefix = f"TK{today}"
@@ -79,3 +284,36 @@ class TicketService:
             TicketStatus.CANCELLED: TicketAction.CANCEL,
         }
         return actions.get(status, TicketAction.CREATE)
+
+    def _ensure_status(self, current: TicketStatus, expected: TicketStatus) -> None:
+        if current != expected:
+            raise TicketConflictError
+
+    def _add_record(
+        self,
+        ticket: Ticket,
+        operator_id: int,
+        from_status: TicketStatus | None,
+        to_status: TicketStatus,
+        action: TicketAction,
+        remark: str | None,
+    ) -> None:
+        self.db.add(
+            TicketRecord(
+                ticket_id=ticket.id,
+                operator_id=operator_id,
+                from_status=from_status,
+                to_status=to_status,
+                action=action,
+                remark=remark,
+            )
+        )
+
+    def _asset_status_after_repair(self, payload: TicketComplete) -> AssetStatus:
+        if payload.asset_status_after_repair:
+            return AssetStatus(payload.asset_status_after_repair)
+        if payload.repair_result in {RepairResult.FIXED, RepairResult.REPLACE_REPAIR}:
+            return AssetStatus.IN_USE
+        if payload.repair_result == RepairResult.SCRAPPED:
+            return AssetStatus.SCRAPPED
+        return AssetStatus.REPAIRING
