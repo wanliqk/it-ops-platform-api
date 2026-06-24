@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +10,7 @@ from app.api.mobile.router import mobile_router
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.responses import APIException, MobileAPIException, error_response, fail
+from app.scheduler.scheduler import shutdown_scheduler, start_scheduler
 
 CORS_ALLOW_ORIGINS = [
     "http://localhost:5173",
@@ -14,8 +18,18 @@ CORS_ALLOW_ORIGINS = [
 ]
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    _ = app
+    start_scheduler()
+    try:
+        yield
+    finally:
+        shutdown_scheduler()
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title=settings.app_name, debug=settings.debug)
+    app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ALLOW_ORIGINS,

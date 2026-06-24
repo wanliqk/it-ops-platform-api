@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 120
+    scheduler_enabled: bool = True
+    sla_check_interval_minutes: int = 5
     database_url: str = (
         "mysql+pymysql://it:123456@127.0.0.1:3306/"
         "it_ops_platform?charset=utf8mb4"
@@ -28,6 +30,13 @@ class Settings(BaseSettings):
                 return False
             if normalized in {"debug", "dev", "development"}:
                 return True
+        return value
+
+    @field_validator("sla_check_interval_minutes")
+    @classmethod
+    def validate_sla_check_interval_minutes(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("SLA_CHECK_INTERVAL_MINUTES must be greater than 0")
         return value
 
 

@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import Base
-from app.models import SlaRule, Ticket, TicketPriority, TicketStatus, User
+from app.models import Notification, SlaRule, Ticket, TicketPriority, TicketStatus, User
 from app.models import __all__ as _model_exports
 from app.schemas.ticket import TicketAssign, TicketComplete, TicketCreate, TicketStart
 from app.services.sla_service import SlaService
@@ -214,3 +214,103 @@ def test_complete_writes_resolved_at(db_session: Session) -> None:
 
     assert completed.status == TicketStatus.COMPLETED
     assert completed.resolved_at == completed.completed_at
+
+
+def test_check_ticket_sla_timeout_marks_overdue_and_creates_notifications(
+    db_session: Session,
+) -> None:
+    now = datetime.now()
+    db_session.add(
+        Ticket(
+            id=1,
+            ticket_no="TK1",
+            title="overdue",
+            description="test",
+            status=TicketStatus.PENDING,
+            reporter_id=1,
+            handler_id=2,
+            sla_response_deadline=now - timedelta(minutes=10),
+            sla_resolve_deadline=now - timedelta(minutes=5),
+        )
+    )
+    db_session.commit()
+
+    result = SlaService(db_session).check_ticket_sla_timeout()
+    db_session.commit()
+
+    ticket = db_session.get(Ticket, 1)
+    notifications = db_session.query(Notification).order_by(Notification.id).all()
+    assert result.scanned == 1
+    assert result.response_overdue == 1
+    assert result.resolve_overdue == 1
+    assert ticket.response_overdue == 1
+    assert ticket.resolve_overdue == 1
+    assert [item.title for item in notifications] == ["工单响应已超时", "工单处理已超时"]
+    assert {item.user_id for item in notifications} == {2}
+
+
+def test_check_ticket_sla_timeout_does_not_create_duplicate_notifications(
+    db_session: Session,
+) -> None:
+    now = datetime.now()
+    db_session.add(
+        Ticket(
+            id=1,
+            ticket_no="TK1",
+            title="overdue",
+            description="test",
+            status=TicketStatus.PENDING,
+            reporter_id=1,
+            sla_response_deadline=now - timedelta(minutes=10),
+            sla_resolve_deadline=now - timedelta(minutes=5),
+        )
+    )
+    db_session.commit()
+
+    first_result = SlaService(db_session).check_ticket_sla_timeout()
+    second_result = SlaService(db_session).check_ticket_sla_timeout()
+    db_session.commit()
+
+    notifications = db_session.query(Notification).all()
+    assert first_result.response_overdue == 1
+    assert first_result.resolve_overdue == 1
+    assert second_result.response_overdue == 0
+    assert second_result.resolve_overdue == 0
+    assert len(notifications) == 2
+
+
+def test_check_ticket_sla_timeout_skips_finished_tickets(db_session: Session) -> None:
+    now = datetime.now()
+    db_session.add_all(
+        [
+            Ticket(
+                id=1,
+                ticket_no="TK1",
+                title="completed",
+                description="test",
+                status=TicketStatus.COMPLETED,
+                reporter_id=1,
+                sla_response_deadline=now - timedelta(minutes=10),
+                sla_resolve_deadline=now - timedelta(minutes=5),
+            ),
+            Ticket(
+                id=2,
+                ticket_no="TK2",
+                title="cancelled",
+                description="test",
+                status=TicketStatus.CANCELLED,
+                reporter_id=1,
+                sla_response_deadline=now - timedelta(minutes=10),
+                sla_resolve_deadline=now - timedelta(minutes=5),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    result = SlaService(db_session).check_ticket_sla_timeout()
+    db_session.commit()
+
+    assert result.scanned == 0
+    assert db_session.get(Ticket, 1).response_overdue == 0
+    assert db_session.get(Ticket, 2).resolve_overdue == 0
+    assert db_session.query(Notification).count() == 0

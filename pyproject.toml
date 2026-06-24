@@ -5,6 +5,7 @@ description = "Backend for enterprise IT ticketing and asset management."
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.13.0",
+    "apscheduler>=3.10.4,<4.0.0",
     "email-validator>=2.1.0",
     "fastapi>=0.111.0",
     "passlib[bcrypt]>=1.7.4",
