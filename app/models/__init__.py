@@ -1,5 +1,6 @@
 from app.models.asset import Asset, AssetCategory, AssetStatus
 from app.models.faq import Faq, FaqCategory
+from app.models.notification import Notification
 from app.models.operation_log import OperationLog, OperationResult
 from app.models.rbac import SysPermission, SysRole, SysRolePermission, SysUserRole
 from app.models.ticket import (
@@ -20,6 +21,7 @@ __all__ = [
     "AssetStatus",
     "Faq",
     "FaqCategory",
+    "Notification",
     "OperationLog",
     "OperationResult",
     "RepairRecord",

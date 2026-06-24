@@ -8,6 +8,7 @@ from app.api.v1.routes import (
     dicts,
     faqs,
     health,
+    notifications,
     operation_logs,
     repair_records,
     tickets,
@@ -29,6 +30,7 @@ api_router.include_router(assets.router, prefix="/assets", tags=["assets"])
 api_router.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
 api_router.include_router(faqs.router, prefix="/faqs", tags=["faqs"])
 api_router.include_router(repair_records.router, prefix="/repair-records", tags=["repair-records"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(operation_logs.router, prefix="/operation-logs", tags=["operation-logs"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(dicts.router, prefix="/dicts", tags=["dicts"])

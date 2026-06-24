@@ -102,6 +102,34 @@ INSERT INTO `it_faq` VALUES (2, '打印机卡纸应该如何处理？', 'printer
 INSERT INTO `it_faq` VALUES (3, '无法访问内网系统怎么办？', 'network', '无法访问 ERP、OA 等内网系统时的处理方法', '1. 检查网线或 Wi-Fi 是否连接；2. 尝试访问其他网站判断是否为整体网络问题；3. 使用 ipconfig 查看是否获取到正确 IP；4. 重启浏览器后再次访问；5. 如果多个系统均无法访问，请联系 IT 运维人员。', 21, 3, 1, '2026-06-23 10:29:16', '2026-06-23 10:29:16');
 
 -- ----------------------------
+-- Table structure for it_notification
+-- ----------------------------
+DROP TABLE IF EXISTS `it_notification`;
+CREATE TABLE `it_notification`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '通知ID',
+  `user_id` bigint(20) NOT NULL COMMENT '接收用户ID',
+  `title` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '通知标题',
+  `content` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '通知内容',
+  `biz_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '业务类型：ticket工单，asset资产，sla SLA提醒，system系统',
+  `biz_id` bigint(20) NULL DEFAULT NULL COMMENT '关联业务ID，例如工单ID、资产ID',
+  `read_status` tinyint(4) NOT NULL DEFAULT 0 COMMENT '阅读状态：0未读，1已读',
+  `read_at` datetime NULL DEFAULT NULL COMMENT '阅读时间',
+  `deleted` tinyint(4) NOT NULL DEFAULT 0 COMMENT '逻辑删除标识：0正常，1已删除',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_notification_user_status`(`user_id`, `read_status`, `deleted`) USING BTREE,
+  INDEX `idx_notification_biz`(`biz_type`, `biz_id`) USING BTREE,
+  CONSTRAINT `fk_notification_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '站内通知表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of it_notification
+-- ----------------------------
+INSERT INTO `it_notification` VALUES (1, 1, '系统欢迎通知', '欢迎使用企业内部 IT 报修与资产管理平台。', 'system', NULL, 0, NULL, 0, '2026-06-23 18:00:00', '2026-06-23 18:00:00');
+INSERT INTO `it_notification` VALUES (2, 2, '新工单分派提醒', '工单 TK202606210001 已分派给你，请及时处理。', 'ticket', 1, 0, NULL, 0, '2026-06-23 18:05:00', '2026-06-23 18:05:00');
+INSERT INTO `it_notification` VALUES (3, 3, '资产保修提醒', '你名下资产 IT-PC-2026-0001 即将到达保修截止日期。', 'asset', 1, 1, '2026-06-23 18:15:00', 0, '2026-06-23 18:10:00', '2026-06-23 18:15:00');
+-- ----------------------------
 -- Table structure for it_repair_record
 -- ----------------------------
 DROP TABLE IF EXISTS `it_repair_record`;

@@ -47,3 +47,4 @@ class User(Base):
     repair_records = relationship("RepairRecord", back_populates="repair_user")
     operation_logs = relationship("OperationLog", back_populates="user")
     user_roles = relationship("SysUserRole", back_populates="user")
+    notifications = relationship("Notification", back_populates="user")
