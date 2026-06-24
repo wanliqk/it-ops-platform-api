@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
@@ -26,6 +26,7 @@ from app.schemas.ticket import (
 )
 from app.services.sla_service import SlaService
 from app.utils.permissions import get_user_permission_codes, get_user_role_codes
+from app.utils.timezone import local_now
 
 
 class TicketConflictError(Exception):
@@ -39,7 +40,7 @@ class TicketService:
     def create(self, payload: TicketCreate) -> Ticket:
         data = payload.model_dump()
         data["ticket_no"] = data["ticket_no"] or self._generate_ticket_no()
-        created_at = datetime.now(UTC)
+        created_at = local_now()
         data["created_at"] = created_at
         sla_response_deadline, sla_resolve_deadline = SlaService(
             self.db
@@ -124,7 +125,7 @@ class TicketService:
             setattr(ticket, field, value)
 
         if payload.status is not None and payload.status != before_status:
-            self._apply_sla_flow_timestamps(ticket, payload.status, datetime.now(UTC))
+            self._apply_sla_flow_timestamps(ticket, payload.status, local_now())
             self.db.add(
                 TicketRecord(
                     ticket_id=ticket.id,
@@ -147,7 +148,7 @@ class TicketService:
         self._ensure_status(ticket.status, TicketStatus.PENDING)
         ticket.handler_id = payload.handler_id
         ticket.status = TicketStatus.ASSIGNED
-        now = datetime.now(UTC)
+        now = local_now()
         ticket.assigned_at = now
         self._apply_sla_flow_timestamps(ticket, TicketStatus.ASSIGNED, now)
         self._add_record(
@@ -172,7 +173,7 @@ class TicketService:
         if ticket.handler_id is None:
             ticket.handler_id = operator.id
         ticket.status = TicketStatus.PROCESSING
-        now = datetime.now(UTC)
+        now = local_now()
         ticket.started_at = now
         self._apply_sla_flow_timestamps(ticket, TicketStatus.PROCESSING, now)
         self._add_record(
@@ -194,7 +195,7 @@ class TicketService:
         self._ensure_status(ticket.status, TicketStatus.PROCESSING)
         if not self._is_admin(operator) and ticket.handler_id != operator.id:
             raise PermissionError
-        now = datetime.now(UTC)
+        now = local_now()
         ticket.status = TicketStatus.COMPLETED
         ticket.result = payload.result
         ticket.completed_at = now
@@ -293,7 +294,7 @@ class TicketService:
         return "admin" in get_user_role_codes(self.db, user.id)
 
     def _generate_ticket_no(self) -> str:
-        today = datetime.now(UTC).strftime("%Y%m%d")
+        today = local_now().strftime("%Y%m%d")
         prefix = f"TK{today}"
         latest_no = self.db.scalar(
             select(func.max(Ticket.ticket_no)).where(Ticket.ticket_no.like(f"{prefix}%"))

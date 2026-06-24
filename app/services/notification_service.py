@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Notification
+from app.utils.timezone import local_now
 
 
 class NotificationService:
@@ -96,13 +95,13 @@ class NotificationService:
             return None
         if notification.read_status == 0:
             notification.read_status = 1
-            notification.read_at = datetime.now(UTC)
+            notification.read_at = local_now()
         self.db.flush()
         return notification
 
     def mark_read_batch(self, *, ids: list[int], user_id: int) -> int:
         notifications = self._list_mutable_notifications(ids=ids, user_id=user_id)
-        now = datetime.now(UTC)
+        now = local_now()
         processed_count = 0
         for notification in notifications:
             if notification.read_status == 0:
@@ -122,7 +121,7 @@ class NotificationService:
                 )
             )
         )
-        now = datetime.now(UTC)
+        now = local_now()
         for notification in notifications:
             notification.read_status = 1
             notification.read_at = now

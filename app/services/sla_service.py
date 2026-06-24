@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import SlaRule, Ticket, TicketStatus
 from app.schemas.sla_rule_schema import SlaRuleCreate, SlaRuleUpdate
 from app.services.notification_service import NotificationService
+from app.utils.timezone import local_now
 
 DEFAULT_RESPONSE_MINUTES = 60
 DEFAULT_RESOLVE_MINUTES = 480
@@ -140,8 +141,7 @@ class SlaService:
 
     def check_ticket_sla_timeout(self) -> SlaTimeoutCheckResult:
         logger.info("[SLA Timeout] start checking")
-        now = datetime.now()
-        now_aware = datetime.now(UTC)
+        now = local_now()
         tickets = list(
             self.db.scalars(
                 select(Ticket)
@@ -175,7 +175,7 @@ class SlaService:
                 ticket.sla_response_deadline is not None
                 and ticket.first_response_at is None
                 and ticket.response_overdue == 0
-                and self._is_past_deadline(ticket.sla_response_deadline, now_aware, now)
+                and self._is_past_deadline(ticket.sla_response_deadline, now)
             ):
                 ticket.response_overdue = 1
                 response_overdue_count += 1
@@ -198,7 +198,7 @@ class SlaService:
                 ticket.sla_resolve_deadline is not None
                 and ticket.resolved_at is None
                 and ticket.resolve_overdue == 0
-                and self._is_past_deadline(ticket.sla_resolve_deadline, now_aware, now)
+                and self._is_past_deadline(ticket.sla_resolve_deadline, now)
             ):
                 ticket.resolve_overdue = 1
                 resolve_overdue_count += 1
@@ -240,12 +240,11 @@ class SlaService:
     def _is_past_deadline(
         self,
         deadline: datetime,
-        now_aware: datetime,
-        now_naive: datetime,
+        now: datetime,
     ) -> bool:
         if deadline.tzinfo is None:
-            return now_naive > deadline
-        return now_aware > deadline
+            return now > deadline
+        return datetime.now(deadline.tzinfo) > deadline
 
     def _create_timeout_notification(
         self,

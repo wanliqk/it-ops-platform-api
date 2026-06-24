@@ -1,5 +1,8 @@
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+
+from app.utils.timezone import format_date, format_datetime
 
 
 def obj_dict(obj: Any, fields: list[str]) -> dict[str, Any]:
@@ -194,6 +197,10 @@ def faq_dict(faq: Any, *, include_content: bool = True) -> dict[str, Any]:
 
 
 def _value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return format_datetime(value)
+    if isinstance(value, date):
+        return format_date(value)
     if isinstance(value, Decimal):
         return float(value)
     return value
