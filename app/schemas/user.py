@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.user import UserRole
 
@@ -14,6 +14,12 @@ class UserBase(BaseModel):
     email: EmailStr | None = None
     status: int = 1
 
+    @field_validator("department", "phone", "email", mode="before")
+    @classmethod
+    def empty_date_to_none(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
 
 class UserCreate(UserBase):
     password: str
@@ -31,6 +37,13 @@ class UserUpdate(BaseModel):
     email: EmailStr | None = None
     status: int | None = None
 
+    @field_validator("department", "phone", "email", mode="before")
+    @classmethod
+    def empty_date_to_none(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
+
 
 class UserStatusUpdate(BaseModel):
     status: int
@@ -43,6 +56,20 @@ class UserPasswordReset(BaseModel):
 class UserPasswordChange(BaseModel):
     old_password: str
     new_password: str
+
+
+class UserBatchDeleteRequest(BaseModel):
+    ids: list[int] = Field(..., min_length=1, max_length=100)
+
+
+class UserBatchDeleteFailedItem(BaseModel):
+    id: int
+    reason: str
+
+
+class UserBatchDeleteResult(BaseModel):
+    deleted_count: int
+    failed_items: list[UserBatchDeleteFailedItem]
 
 
 class UserRead(UserBase):

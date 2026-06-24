@@ -1,9 +1,28 @@
-from sqlalchemy import or_, select
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
-from app.models import Asset, RepairRecord, Ticket, User
+from app.models import (
+    Asset,
+    OperationLog,
+    RepairRecord,
+    SysRole,
+    SysUserRole,
+    Ticket,
+    TicketStatus,
+    User,
+)
 from app.schemas.user import UserCreate, UserUpdate
+
+UNFINISHED_TICKET_STATUSES = {
+    TicketStatus.PENDING,
+    TicketStatus.ASSIGNED,
+    TicketStatus.PROCESSING,
+}
 
 
 class UserService:
@@ -93,6 +112,69 @@ class UserService:
         ]
         return any(self.db.scalar(stmt.limit(1)) is not None for stmt in checks)
 
+    def batch_delete(self, ids: list[int], current_user_id: int) -> dict[str, Any]:
+        deleted_count = 0
+        failed_items: list[dict[str, int | str]] = []
+
+        for user_id in self._deduplicate_ids(ids):
+            user = self.get(user_id)
+            if user is None:
+                failed_items.append({"id": user_id, "reason": "用户不存在"})
+                continue
+            if user_id == current_user_id:
+                failed_items.append({"id": user_id, "reason": "不能删除当前登录用户"})
+                continue
+            if self.is_super_admin(user):
+                failed_items.append({"id": user_id, "reason": "不能删除超级管理员"})
+                continue
+            if self.has_unfinished_tickets(user_id):
+                failed_items.append({"id": user_id, "reason": "存在未完成工单，无法删除"})
+                continue
+            if self.has_physical_delete_blockers(user_id):
+                failed_items.append({"id": user_id, "reason": "用户已关联业务数据，无法删除"})
+                continue
+
+            self.db.execute(delete(SysUserRole).where(SysUserRole.user_id == user_id))
+            self.db.delete(user)
+            deleted_count += 1
+
+        self.db.flush()
+        return {"deleted_count": deleted_count, "failed_items": failed_items}
+
+    def has_unfinished_tickets(self, user_id: int) -> bool:
+        stmt = (
+            select(Ticket.id)
+            .where(
+                or_(Ticket.reporter_id == user_id, Ticket.handler_id == user_id),
+                Ticket.status.in_(UNFINISHED_TICKET_STATUSES),
+            )
+            .limit(1)
+        )
+        return self.db.scalar(stmt) is not None
+
+    def has_physical_delete_blockers(self, user_id: int) -> bool:
+        checks = [
+            select(Ticket.id).where(
+                or_(Ticket.reporter_id == user_id, Ticket.handler_id == user_id)
+            ),
+            select(Asset.id).where(Asset.user_id == user_id),
+            select(RepairRecord.id).where(RepairRecord.repair_user_id == user_id),
+            select(OperationLog.id).where(OperationLog.user_id == user_id),
+        ]
+        return any(self.db.scalar(stmt.limit(1)) is not None for stmt in checks)
+
+    def is_super_admin(self, user: User) -> bool:
+        role_value = getattr(user.role, "value", user.role)
+        if user.id == 1 or role_value == "admin":
+            return True
+        stmt = (
+            select(SysRole.id)
+            .join(SysUserRole, SysUserRole.role_id == SysRole.id)
+            .where(SysUserRole.user_id == user.id, SysRole.role_code == "admin")
+            .limit(1)
+        )
+        return self.db.scalar(stmt) is not None
+
     def delete(self, user_id: int) -> bool:
         user = self.get(user_id)
         if user is None:
@@ -100,3 +182,12 @@ class UserService:
         self.db.delete(user)
         self.db.commit()
         return True
+
+    def _deduplicate_ids(self, ids: list[int]) -> list[int]:
+        seen: set[int] = set()
+        deduplicated = []
+        for item_id in ids:
+            if item_id not in seen:
+                deduplicated.append(item_id)
+                seen.add(item_id)
+        return deduplicated

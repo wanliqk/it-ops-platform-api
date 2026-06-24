@@ -7,7 +7,13 @@ from app.api.v1.routes._serializers import user_dict
 from app.core.responses import APIException, success
 from app.models import User
 from app.schemas.common import page_data
-from app.schemas.user import UserCreate, UserPasswordReset, UserStatusUpdate, UserUpdate
+from app.schemas.user import (
+    UserBatchDeleteRequest,
+    UserCreate,
+    UserPasswordReset,
+    UserStatusUpdate,
+    UserUpdate,
+)
 from app.services.log_service import LogService
 from app.services.user_service import UserService
 
@@ -63,6 +69,23 @@ def create_user(
     db.commit()
     return success(user_dict(user), "用户创建成功")
 
+
+@router.post("/batch-delete")
+def batch_delete_users(
+    payload: UserBatchDeleteRequest,
+    db: DBSession,
+    request: Request,
+    current_user: UserDeleter,
+) -> dict:
+    result = UserService(db).batch_delete(payload.ids, current_user.id)
+    LogService(db).record(
+        user_id=current_user.id,
+        module_name="用户管理",
+        operation_type="batch_delete",
+        request=request,
+    )
+    db.commit()
+    return success(result, "批量删除完成")
 
 @router.get("/{user_id}")
 def get_user(user_id: int, db: DBSession, _: UserReader) -> dict:
