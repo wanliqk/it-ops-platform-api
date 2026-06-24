@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -45,6 +47,17 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=exc.status_code,
             content=fail(exc.code, exc.message),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    def request_validation_exception_handler(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        _ = request
+        return JSONResponse(
+            status_code=422,
+            content=fail(40000, "参数校验失败"),
         )
 
     return app

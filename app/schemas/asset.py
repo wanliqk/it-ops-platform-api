@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.models.asset import AssetStatus
 
@@ -46,6 +46,13 @@ class AssetBase(BaseModel):
     warranty_expire_date: date | None = None
     remark: str | None = None
 
+    # @field_validator("purchase_date", "warranty_expire_date", mode="before")
+    # @classmethod
+    # def empty_date_to_none(cls, value: object) -> object:
+    #     if value == "":
+    #         return None
+    #     return value
+
 
 class AssetCreate(AssetBase):
     pass
@@ -64,6 +71,13 @@ class AssetUpdate(BaseModel):
     purchase_date: date | None = None
     warranty_expire_date: date | None = None
     remark: str | None = None
+
+    # @field_validator("purchase_date", "warranty_expire_date", mode="before")
+    # @classmethod
+    # def empty_date_to_none(cls, value: object) -> object:
+    #     if value == "":
+    #         return None
+    #     return value
 
 
 class AssetStatusUpdate(BaseModel):
