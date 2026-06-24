@@ -40,6 +40,7 @@ it_asset              资产表
 it_ticket             报修工单表
 it_ticket_record      工单流转记录表
 it_repair_record      维修记录表
+it_sla_rule           SLA规则表
 it_faq                常见问题表
 it_notification       站内通知表
 sys_operation_log     操作日志表
@@ -264,6 +265,25 @@ sys_user -> sys_user_role -> sys_role -> sys_role_permission -> sys_permission
 
 ---
 
+## 3.10 SLA 规则优先级 priority
+
+| 值     | 说明 |
+| ------ | -- |
+| low    | 低  |
+| medium | 普通 |
+| high   | 高  |
+| urgent | 紧急 |
+
+说明：
+
+```text
+工单接口历史优先级使用 normal 表示普通；
+SLA 规则使用 medium 表示普通；
+后端计算 SLA 时会将工单 priority = normal 映射为 SLA priority = medium。
+```
+
+---
+
 # 4. RBAC 权限规则
 
 ## 4.1 权限模型
@@ -299,6 +319,7 @@ sys_user -> sys_user_role -> sys_role -> sys_role_permission -> sys_permission
 | 工单管理   | ticket:create、ticket:view_all、ticket:view_self、ticket:update、ticket:assign、ticket:start、ticket:complete、ticket:cancel、ticket:delete、ticket:records |
 | 维修记录   | repair_record:view、repair_record:update |
 | FAQ 管理 | faq:view、faq:create、faq:update、faq:status、faq:delete、faq:stats |
+| SLA规则管理 | sla:rule:list、sla:rule:create、sla:rule:update、sla:rule:delete、sla:rule:enable |
 | 操作日志   | operation_log:view |
 | 首页看板   | dashboard:view |
 | 字典     | dict:view |
@@ -1352,7 +1373,13 @@ GET /api/v1/tickets?status=pending&page=1&page_size=10
         "asset_no": "IT-PC-2026-0001",
         "asset_name": "财务部办公电脑",
         "created_at": "2026-06-21 09:10:00",
-        "completed_at": "2026-06-21 10:10:00"
+        "completed_at": "2026-06-21 10:10:00",
+        "sla_response_deadline": "2026-06-21 09:40:00",
+        "sla_resolve_deadline": "2026-06-21 13:10:00",
+        "first_response_at": "2026-06-21 09:20:00",
+        "resolved_at": "2026-06-21 10:10:00",
+        "response_overdue": 0,
+        "resolve_overdue": 0
       }
     ],
     "total": 1,
@@ -1404,7 +1431,9 @@ POST /api/v1/tickets
   "data": {
     "id": 5,
     "ticket_no": "TK202606230001",
-    "status": "pending"
+    "status": "pending",
+    "sla_response_deadline": "2026-06-23 01:29:35",
+    "sla_resolve_deadline": "2026-06-23 08:29:35"
   }
 }
 ```
@@ -1416,8 +1445,10 @@ POST /api/v1/tickets
 2. reporter_id 使用当前登录用户ID；
 3. 创建后 status = pending；
 4. 如果 asset_id 传入，必须校验资产是否存在；
-5. 创建成功后写入 it_ticket_record，action = create；
-6. 创建成功后记录操作日志。
+5. 后端根据 fault_type、priority 和启用状态 SLA 规则自动计算 sla_response_deadline、sla_resolve_deadline；
+6. SLA 第一版按自然时间计算，不排除工作日、节假日和上下班时间；
+7. 创建成功后写入 it_ticket_record，action = create；
+8. 创建成功后记录操作日志。
 ```
 
 ---
@@ -1469,6 +1500,12 @@ GET /api/v1/tickets/{ticket_id}
     "assigned_at": "2026-06-21 09:20:00",
     "started_at": "2026-06-21 09:30:00",
     "completed_at": "2026-06-21 10:10:00",
+    "sla_response_deadline": "2026-06-21 09:40:00",
+    "sla_resolve_deadline": "2026-06-21 13:10:00",
+    "first_response_at": "2026-06-21 09:20:00",
+    "resolved_at": "2026-06-21 10:10:00",
+    "response_overdue": 0,
+    "resolve_overdue": 0,
     "records": [
       {
         "id": 1,
@@ -1555,7 +1592,8 @@ PATCH /api/v1/tickets/{ticket_id}/assign
     "id": 1,
     "status": "assigned",
     "handler_id": 2,
-    "assigned_at": "2026-06-23 10:00:00"
+    "assigned_at": "2026-06-23 10:00:00",
+    "first_response_at": "2026-06-23 10:00:00"
   }
 }
 ```
@@ -1568,8 +1606,9 @@ PATCH /api/v1/tickets/{ticket_id}/assign
 3. handler 用户 role 必须为 it_staff 或 admin；
 4. 派单后 status = assigned；
 5. 更新 handler_id、assigned_at；
-6. 写入 it_ticket_record，action = assign；
-7. 记录操作日志。
+6. 如果 first_response_at 为空，则写入当前时间；如果已有值，不覆盖；
+7. 写入 it_ticket_record，action = assign；
+8. 记录操作日志。
 ```
 
 ---
@@ -1599,7 +1638,8 @@ PATCH /api/v1/tickets/{ticket_id}/start
   "data": {
     "id": 1,
     "status": "processing",
-    "started_at": "2026-06-23 10:15:00"
+    "started_at": "2026-06-23 10:15:00",
+    "first_response_at": "2026-06-23 10:00:00"
   }
 }
 ```
@@ -1613,9 +1653,10 @@ PATCH /api/v1/tickets/{ticket_id}/start
 4. 如果工单 handler_id 为空，IT 人员开始处理时自动设置 handler_id = 当前用户ID；
 5. 开始处理后 status = processing；
 6. 更新 started_at；
-7. 如果工单关联了 asset_id，则将资产状态改为 repairing；
-8. 写入 it_ticket_record，action = start；
-9. 记录操作日志。
+7. 如果 first_response_at 为空，则写入当前时间；如果已有值，不覆盖；
+8. 如果工单关联了 asset_id，则将资产状态改为 repairing；
+9. 写入 it_ticket_record，action = start；
+10. 记录操作日志。
 ```
 
 ---
@@ -1663,7 +1704,8 @@ PATCH /api/v1/tickets/{ticket_id}/complete
   "data": {
     "id": 1,
     "status": "completed",
-    "completed_at": "2026-06-23 11:00:00"
+    "completed_at": "2026-06-23 11:00:00",
+    "resolved_at": "2026-06-23 11:00:00"
   }
 }
 ```
@@ -1675,7 +1717,7 @@ PATCH /api/v1/tickets/{ticket_id}/complete
 2. 非 admin 用户只能完成分配给自己的工单；
 3. RBAC 角色码包含 admin 的用户可以完成任意 processing 工单；
 4. 完成后 status = completed；
-5. 更新 result、completed_at；
+5. 更新 result、completed_at、resolved_at；
 6. 如果工单关联 asset_id：
    - 创建 it_repair_record 维修记录；
    - 根据 asset_status_after_repair 更新资产状态；
@@ -3337,7 +3379,278 @@ PUT /api/v1/users/{user_id}/roles
 
 ---
 
-# 18. 工单状态流转规则
+# 18. SLA 规则管理 API
+
+SLA 规则用于在创建工单时自动计算：
+
+```text
+sla_response_deadline  响应截止时间
+sla_resolve_deadline   处理完成截止时间
+```
+
+当前版本只使用自然时间计算，不处理工作日、节假日和工作时间段。
+
+## 18.1 查询 SLA 规则列表
+
+```http
+GET /api/v1/sla-rules
+```
+
+权限：sla:rule:list
+
+查询参数：
+
+| 参数            | 类型     | 必填 | 说明                              |
+| ------------- | ------ | -- | ------------------------------- |
+| priority      | string | 否  | urgent / high / medium / low    |
+| ticket_category | string | 否 | hardware / software / network / printer / account / other |
+| enabled       | int    | 否  | 1启用，0停用                       |
+| page          | int    | 否  | 页码，默认 1                       |
+| page_size     | int    | 否  | 每页数量，默认 10，最大 100           |
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "name": "紧急工单通用SLA",
+        "ticket_category": null,
+        "priority": "urgent",
+        "response_minutes": 10,
+        "resolve_minutes": 120,
+        "enabled": 1,
+        "sort_order": 10,
+        "created_at": "2026-06-24 00:00:00",
+        "updated_at": "2026-06-24 00:00:00"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 10,
+    "pages": 1
+  }
+}
+```
+
+---
+
+## 18.2 创建 SLA 规则
+
+```http
+POST /api/v1/sla-rules
+```
+
+权限：sla:rule:create
+
+请求参数：
+
+```json
+{
+  "name": "网络故障紧急SLA",
+  "ticket_category": "network",
+  "priority": "urgent",
+  "response_minutes": 5,
+  "resolve_minutes": 60,
+  "enabled": 1,
+  "sort_order": 1
+}
+```
+
+字段说明：
+
+| 字段               | 类型     | 必填 | 说明                                      |
+| ---------------- | ------ | -- | --------------------------------------- |
+| name             | string | 是  | 规则名称                                    |
+| ticket_category  | string | 否  | 工单类型；为空表示通用规则                         |
+| priority         | string | 是  | urgent / high / medium / low            |
+| response_minutes | int    | 是  | 响应时限，单位分钟，必须大于 0                      |
+| resolve_minutes  | int    | 是  | 处理完成时限，单位分钟，必须大于 0，且大于等于响应时限 |
+| enabled          | int    | 否  | 1启用，0停用，默认 1                          |
+| sort_order       | int    | 否  | 排序值，越小越优先，默认 0                       |
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "SLA规则创建成功",
+  "data": {
+    "id": 6,
+    "name": "网络故障紧急SLA",
+    "ticket_category": "network",
+    "priority": "urgent",
+    "response_minutes": 5,
+    "resolve_minutes": 60,
+    "enabled": 1,
+    "sort_order": 1
+  }
+}
+```
+
+业务规则：
+
+```text
+1. priority 只能为 urgent、high、medium、low；
+2. response_minutes 必须大于 0；
+3. resolve_minutes 必须大于 0；
+4. resolve_minutes 必须大于或等于 response_minutes；
+5. enabled 只能为 1 或 0；
+6. 创建成功后记录操作日志。
+```
+
+---
+
+## 18.3 修改 SLA 规则
+
+```http
+PUT /api/v1/sla-rules/{id}
+```
+
+权限：sla:rule:update
+
+请求参数：
+
+```json
+{
+  "name": "高优先级通用SLA",
+  "ticket_category": null,
+  "priority": "high",
+  "response_minutes": 30,
+  "resolve_minutes": 240,
+  "enabled": 1,
+  "sort_order": 20
+}
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "SLA规则修改成功",
+  "data": {
+    "id": 2,
+    "name": "高优先级通用SLA",
+    "ticket_category": null,
+    "priority": "high",
+    "response_minutes": 30,
+    "resolve_minutes": 240,
+    "enabled": 1,
+    "sort_order": 20
+  }
+}
+```
+
+业务规则：
+
+```text
+1. 规则不存在返回 404；
+2. 修改时执行与创建相同的数据校验；
+3. 修改成功后记录操作日志。
+```
+
+---
+
+## 18.4 启用或停用 SLA 规则
+
+```http
+PATCH /api/v1/sla-rules/{id}/enabled
+```
+
+权限：sla:rule:enable
+
+请求参数：
+
+```json
+{
+  "enabled": 0
+}
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "SLA规则状态修改成功",
+  "data": {
+    "id": 2,
+    "enabled": 0
+  }
+}
+```
+
+业务规则：
+
+```text
+1. enabled 只能为 1 或 0；
+2. 规则不存在返回 404；
+3. 修改成功后记录操作日志。
+```
+
+---
+
+## 18.5 删除 SLA 规则
+
+```http
+DELETE /api/v1/sla-rules/{id}
+```
+
+权限：sla:rule:delete
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "SLA规则删除成功",
+  "data": null
+}
+```
+
+业务规则：
+
+```text
+1. 删除使用物理删除；
+2. 规则不存在返回 404；
+3. 删除成功后记录操作日志。
+```
+
+---
+
+## 18.6 SLA 规则匹配与截止时间计算
+
+规则匹配顺序：
+
+```text
+1. 优先匹配 ticket_category + priority 完全匹配且 enabled = 1 的规则；
+2. 如果没有匹配到，则匹配 ticket_category IS NULL + priority 的通用规则；
+3. 如果仍然没有匹配到，则使用兜底规则：response_minutes = 60，resolve_minutes = 480；
+4. 多条规则同时匹配时，按 sort_order ASC、id ASC 排序。
+```
+
+截止时间计算：
+
+```text
+sla_response_deadline = created_at + response_minutes
+sla_resolve_deadline = created_at + resolve_minutes
+```
+
+工单状态流转时间：
+
+```text
+首次进入 assigned 或 processing 状态时，如果 first_response_at 为空，则写入当前时间；
+进入 completed 状态时，写入 resolved_at。
+```
+
+---
+
+# 19. 工单状态流转规则
 
 工单状态只能按照以下规则流转：
 
@@ -3371,9 +3684,9 @@ processing -> cancelled
 
 ---
 
-# 19. 后端实现要求
+# 20. 后端实现要求
 
-## 19.1 FastAPI 路由建议
+## 20.1 FastAPI 路由建议
 
 建议拆分以下 router：
 
@@ -3389,12 +3702,13 @@ app/api/v1/routers/dashboard.py
 app/api/v1/routers/dicts.py
 app/api/v1/routers/faqs.py
 app/api/v1/routers/notifications.py
+app/api/v1/routers/sla_rules.py
 app/routers/rbac.py
 ```
 
 ---
 
-## 19.2 Service 层建议
+## 20.2 Service 层建议
 
 建议拆分以下 service：
 
@@ -3409,11 +3723,12 @@ app/services/dashboard_service.py
 app/services/faq_service.py
 app/services/notification_service.py
 app/services/rbac_service.py
+app/services/sla_service.py
 ```
 
 ---
 
-## 19.3 数据模型建议
+## 20.3 数据模型建议
 
 建议拆分以下 model：
 
@@ -3428,11 +3743,12 @@ app/models/operation_log.py
 app/models/faq.py
 app/models/notification.py
 app/models/rbac.py
+app/models/sla_rule.py
 ```
 
 ---
 
-## 19.4 Pydantic Schema 建议
+## 20.4 Pydantic Schema 建议
 
 建议拆分以下 schema：
 
@@ -3446,11 +3762,12 @@ app/schemas/common_schema.py
 app/schemas/faq_schema.py
 app/schemas/notification_schema.py
 app/schemas/rbac_schema.py
+app/schemas/sla_rule_schema.py
 ```
 
 ---
 
-## 19.5 统一响应工具
+## 20.5 统一响应工具
 
 请封装统一响应方法：
 
@@ -3472,7 +3789,7 @@ def fail(code=40000, message="操作失败", data=None):
 
 ---
 
-## 19.6 权限校验要求
+## 20.6 权限校验要求
 
 需要实现依赖函数：
 
@@ -3499,7 +3816,7 @@ sys_user.role 可以继续作为用户基础信息字段返回；
 
 ---
 
-## 19.7 操作日志要求
+## 20.7 操作日志要求
 
 以下操作必须写入 sys_operation_log：
 
@@ -3531,6 +3848,10 @@ sys_user.role 可以继续作为用户基础信息字段返回；
 分配角色权限
 查询用户角色
 分配用户角色
+创建 SLA 规则
+修改 SLA 规则
+启用停用 SLA 规则
+删除 SLA 规则
 ```
 
 日志字段：
