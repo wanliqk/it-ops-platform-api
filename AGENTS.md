@@ -6,6 +6,7 @@ This repository is a FastAPI backend for IT ticketing and asset management. Appl
 
 ## Build, Test, and Development Commands
 
+- `conda run -n itops`: Before executing any command, you need to load the Python environment first.
 - `poetry install --no-root`: install runtime and development dependencies from `pyproject.toml`.
 - `uvicorn app.main:app --reload`: run the API locally at `http://127.0.0.1:8000`.
 - `pytest`: run the test suite under `tests/`.

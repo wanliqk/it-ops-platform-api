@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -255,6 +255,7 @@ class TicketService:
         )
         if has_repair is not None:
             raise TicketConflictError
+        self.db.execute(delete(TicketRecord).where(TicketRecord.ticket_id == ticket_id))
         self.db.delete(ticket)
         self.db.commit()
         return True
