@@ -14,6 +14,7 @@ from app.models.ticket import (
     TicketRecord,
     TicketStatus,
 )
+from app.models.todo import Todo, TodoPriority, TodoStatus, TodoType
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -38,6 +39,10 @@ __all__ = [
     "TicketPriority",
     "TicketRecord",
     "TicketStatus",
+    "Todo",
+    "TodoPriority",
+    "TodoStatus",
+    "TodoType",
     "User",
     "UserRole",
 ]

@@ -323,7 +323,7 @@ CREATE TABLE `sys_permission`  (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `permission_code`(`permission_code`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 115 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统权限表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 125 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统权限表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Records of sys_permission
@@ -377,6 +377,11 @@ INSERT INTO `sys_permission` VALUES (111, 'sla:rule:create', '创建SLA规则', 
 INSERT INTO `sys_permission` VALUES (112, 'sla:rule:update', '修改SLA规则', 'SLA规则管理', 'api', 'PUT', '/api/v1/sla-rules/{id}', '修改SLA规则', 112, 1, '2026-06-24 00:00:00', '2026-06-24 00:00:00');
 INSERT INTO `sys_permission` VALUES (113, 'sla:rule:delete', '删除SLA规则', 'SLA规则管理', 'api', 'DELETE', '/api/v1/sla-rules/{id}', '删除SLA规则', 113, 1, '2026-06-24 00:00:00', '2026-06-24 00:00:00');
 INSERT INTO `sys_permission` VALUES (114, 'sla:rule:enable', '启用停用SLA规则', 'SLA规则管理', 'api', 'PATCH', '/api/v1/sla-rules/{id}/enabled', '启用或停用SLA规则', 114, 1, '2026-06-24 00:00:00', '2026-06-24 00:00:00');
+INSERT INTO `sys_permission` VALUES (120, 'todo:view_self', '查看我的待办', '待办事项', 'api', 'GET', '/api/v1/todos/my', '查看当前登录用户自己的待办事项', 120, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (121, 'todo:view_all', '查看全部待办', '待办事项', 'api', 'GET', '/api/v1/todos', '管理员查看全部待办事项', 121, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (122, 'todo:create', '创建待办', '待办事项', 'api', 'POST', '/api/v1/todos', '创建待办事项', 122, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (123, 'todo:update', '处理待办', '待办事项', 'api', 'PUT', '/api/v1/todos/{todo_id}/start', '开始或完成待办事项', 123, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (124, 'todo:cancel', '取消待办', '待办事项', 'api', 'PUT', '/api/v1/todos/{todo_id}/cancel', '取消待办事项', 124, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
 
 -- ----------------------------
 -- Table structure for sys_role
@@ -416,7 +421,7 @@ CREATE TABLE `sys_role_permission`  (
   INDEX `fk_role_permission_permission`(`permission_id`) USING BTREE,
   CONSTRAINT `fk_role_permission_permission` FOREIGN KEY (`permission_id`) REFERENCES `sys_permission` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_role_permission_role` FOREIGN KEY (`role_id`) REFERENCES `sys_role` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
-) ENGINE = InnoDB AUTO_INCREMENT = 99 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色权限关联表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 108 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色权限关联表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Records of sys_role_permission
@@ -470,6 +475,15 @@ INSERT INTO `sys_role_permission` VALUES (95, 1, 111, '2026-06-24 00:00:00');
 INSERT INTO `sys_role_permission` VALUES (96, 1, 112, '2026-06-24 00:00:00');
 INSERT INTO `sys_role_permission` VALUES (97, 1, 113, '2026-06-24 00:00:00');
 INSERT INTO `sys_role_permission` VALUES (98, 1, 114, '2026-06-24 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (99, 1, 120, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (100, 1, 121, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (101, 1, 122, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (102, 1, 123, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (103, 1, 124, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (104, 2, 120, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (105, 2, 123, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (106, 3, 120, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (107, 3, 123, '2026-06-25 00:00:00');
 INSERT INTO `sys_role_permission` VALUES (64, 2, 35, '2026-06-23 17:19:26');
 INSERT INTO `sys_role_permission` VALUES (65, 2, 33, '2026-06-23 17:19:26');
 INSERT INTO `sys_role_permission` VALUES (66, 2, 30, '2026-06-23 17:19:26');
@@ -519,6 +533,47 @@ INSERT INTO `sys_user` VALUES (1, 'admin', 'pbkdf2_sha256$260000$abc123$26f0fb8c
 INSERT INTO `sys_user` VALUES (2, 'it_zhang', 'pbkdf2_sha256$260000$abc123$26f0fb8c10bb28dc85118fe973c28b0521d6c98d766db114a04e358e74c447f0', '张工', 'it_staff', '信息部', '13800000002', 'zhang@example.com', 1, '2026-06-22 19:39:10', '2026-06-22 20:46:06');
 INSERT INTO `sys_user` VALUES (3, 'employee_li', 'pbkdf2_sha256$260000$abc123$26f0fb8c10bb28dc85118fe973c28b0521d6c98d766db114a04e358e74c447f0', '李明', 'employee', '财务部', '13800000003', 'liming@example.com', 1, '2026-06-22 19:39:10', '2026-06-22 20:46:07');
 INSERT INTO `sys_user` VALUES (4, 'employee_wang', 'pbkdf2_sha256$260000$abc123$26f0fb8c10bb28dc85118fe973c28b0521d6c98d766db114a04e358e74c447f0', '王芳', 'employee', '运营部', '13800000004', 'wangfang@example.com', 1, '2026-06-22 19:39:10', '2026-06-22 20:46:10');
+
+-- ----------------------------
+-- Table structure for sys_todo
+-- ----------------------------
+DROP TABLE IF EXISTS `sys_todo`;
+CREATE TABLE `sys_todo`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '待办ID，主键',
+  `todo_no` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '待办编号',
+  `title` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '待办标题',
+  `content` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '待办内容',
+  `todo_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '待办类型',
+  `business_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '业务类型',
+  `business_id` bigint(20) NOT NULL COMMENT '关联业务ID',
+  `assignee_id` bigint(20) NULL DEFAULT NULL COMMENT '待办处理人ID',
+  `assignee_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '待办处理人名称',
+  `status` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending' COMMENT '待办状态：pending待处理，processing处理中，completed已完成，cancelled已取消，expired已超时',
+  `priority` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'normal' COMMENT '优先级：low低，normal普通，high高，urgent紧急',
+  `deadline_at` datetime NULL DEFAULT NULL COMMENT '截止时间',
+  `completed_at` datetime NULL DEFAULT NULL COMMENT '完成时间',
+  `cancelled_at` datetime NULL DEFAULT NULL COMMENT '取消时间',
+  `reminded_at` datetime NULL DEFAULT NULL COMMENT '超时提醒时间',
+  `expire_notice_sent` tinyint(4) NOT NULL DEFAULT 0 COMMENT '超时提醒是否已发送：0否，1是',
+  `remark` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '备注',
+  `created_by` bigint(20) NULL DEFAULT NULL COMMENT '创建人ID',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` tinyint(4) NOT NULL DEFAULT 0 COMMENT '逻辑删除标识：0正常，1已删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `todo_no`(`todo_no`) USING BTREE,
+  INDEX `idx_todo_assignee`(`assignee_id`) USING BTREE,
+  INDEX `idx_todo_business`(`business_type`, `business_id`) USING BTREE,
+  INDEX `idx_todo_status_deadline`(`status`, `deadline_at`) USING BTREE,
+  CONSTRAINT `fk_todo_assignee` FOREIGN KEY (`assignee_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '待办事项表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of sys_todo
+-- ----------------------------
+INSERT INTO `sys_todo` VALUES (1, 'TODO202606250001', '待处理工单：打印机无法打印', '工单 TK202606230002/打印机无法打印 已分配给你，请及时处理。', 'ticket_process', 'ticket', 6, 2, '张工', 'pending', 'normal', '2026-06-25 10:00:00', NULL, NULL, NULL, 0, NULL, 1, '2026-06-25 09:00:00', '2026-06-25 09:00:00', 0);
+INSERT INTO `sys_todo` VALUES (2, 'TODO202606250002', '已超时工单待办：部分电脑访问内网系统较慢', '工单 TK202606210003/部分电脑访问内网系统较慢 已超过待办截止时间。', 'ticket_process', 'ticket', 3, 2, '张工', 'expired', 'urgent', '2026-06-21 12:20:00', NULL, NULL, '2026-06-25 09:05:00', 1, NULL, 1, '2026-06-25 09:00:00', '2026-06-25 09:05:00', 0);
+INSERT INTO `sys_todo` VALUES (3, 'TODO202606250003', '待确认工单：财务电脑无法开机', '工单 TK202606210001/财务电脑无法开机 已处理完成，请确认结果。', 'ticket_confirm', 'ticket', 1, 3, '李明', 'pending', 'high', NULL, NULL, NULL, NULL, 0, NULL, 2, '2026-06-25 09:00:00', '2026-06-25 09:00:00', 0);
 
 -- ----------------------------
 -- Table structure for sys_user_role

@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     repair_records,
     sla_rules,
     tickets,
+    todos,
     users,
 )
 from app.routers import rbac
@@ -29,6 +30,7 @@ api_router.include_router(
 )
 api_router.include_router(assets.router, prefix="/assets", tags=["assets"])
 api_router.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
+api_router.include_router(todos.router, prefix="/todos", tags=["todos"])
 api_router.include_router(faqs.router, prefix="/faqs", tags=["faqs"])
 api_router.include_router(repair_records.router, prefix="/repair-records", tags=["repair-records"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])

@@ -4,6 +4,7 @@ import logging
 
 from app.db.session import SessionLocal
 from app.services.sla_service import check_ticket_sla_timeout as check_ticket_sla_timeout_service
+from app.services.todo_service import check_todo_timeout as check_todo_timeout_service
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ def check_ticket_sla_timeout() -> None:
     db = SessionLocal()
     try:
         result = check_ticket_sla_timeout_service(db)
+        todo_result = check_todo_timeout_service(db)
         db.commit()
         logger.info(
             "[SLA Job] scanned=%s response_overdue=%s "
@@ -25,6 +27,13 @@ def check_ticket_sla_timeout() -> None:
             result.resolve_overdue,
             result.notification_created,
             result.skipped,
+        )
+        logger.info(
+            "[Todo Job] scanned=%s expired=%s notification_created=%s skipped=%s",
+            todo_result.scanned,
+            todo_result.expired,
+            todo_result.notification_created,
+            todo_result.skipped,
         )
     except Exception:
         db.rollback()

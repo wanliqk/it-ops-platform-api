@@ -122,6 +122,35 @@ def ticket_record_dict(record: Any) -> dict[str, Any]:
     return data
 
 
+def todo_dict(todo: Any) -> dict[str, Any]:
+    data = obj_dict(
+        todo,
+        [
+            "id",
+            "todo_no",
+            "title",
+            "content",
+            "todo_type",
+            "business_type",
+            "business_id",
+            "assignee_id",
+            "assignee_name",
+            "status",
+            "priority",
+            "deadline_at",
+            "completed_at",
+            "cancelled_at",
+            "remark",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ],
+    )
+    data["business_title"] = getattr(todo, "business_title", None)
+    data["business_status"] = getattr(todo, "business_status", None)
+    return data
+
+
 def repair_record_dict(record: Any) -> dict[str, Any]:
     data = obj_dict(
         record,

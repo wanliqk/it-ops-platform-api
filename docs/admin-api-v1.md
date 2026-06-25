@@ -44,6 +44,7 @@ it_repair_record      维修记录表
 it_sla_rule           SLA规则表
 it_faq                常见问题表
 it_notification       站内通知表
+sys_todo              待办事项表
 sys_operation_log     操作日志表
 ```
 
@@ -321,6 +322,7 @@ SLA 规则使用 medium 表示普通；
 | 维修记录   | repair_record:view、repair_record:update |
 | FAQ 管理 | faq:view、faq:create、faq:update、faq:status、faq:delete、faq:stats |
 | SLA规则管理 | sla:rule:list、sla:rule:create、sla:rule:update、sla:rule:delete、sla:rule:enable |
+| 待办事项 | todo:view_self、todo:view_all、todo:create、todo:update、todo:cancel |
 | 操作日志   | operation_log:view |
 | 首页看板   | dashboard:view |
 | 字典     | dict:view |
@@ -3819,7 +3821,325 @@ timezone: Asia/Shanghai
 
 ---
 
-# 19. 工单状态流转规则
+# 19. 待办事项 Todo API
+
+待办事项用于告诉用户“当前需要处理什么”，不是站内信的替代品。站内信用于通知用户发生了什么，待办事项用于承载工单处理、确认、SLA 截止时间和工作台统计。
+
+## 19.1 查询我的待办列表
+
+```http
+GET /api/v1/todos/my
+```
+
+权限：todo:view_self
+
+查询参数：
+
+| 参数            | 类型     | 必填 | 说明 |
+| ------------- | ------ | -- | --- |
+| status        | string | 否 | pending / processing / completed / cancelled / expired |
+| todo_type     | string | 否 | ticket_assign / ticket_accept / ticket_process / ticket_confirm / asset_approval / asset_inventory |
+| business_type | string | 否 | ticket / asset / approval |
+| priority      | string | 否 | low / normal / high / urgent |
+| keyword       | string | 否 | 按标题或内容模糊搜索 |
+| start_date    | string | 否 | 创建开始时间 |
+| end_date      | string | 否 | 创建结束时间 |
+| page          | int    | 否 | 页码，默认 1 |
+| page_size     | int    | 否 | 每页数量，默认 10，最大 100 |
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "todo_no": "TODO202606250001",
+        "title": "待处理工单：打印机无法打印",
+        "content": "工单 TK202606230002/打印机无法打印 已分配给你，请及时处理。",
+        "todo_type": "ticket_process",
+        "business_type": "ticket",
+        "business_id": 6,
+        "assignee_id": 2,
+        "assignee_name": "张工",
+        "status": "pending",
+        "priority": "normal",
+        "deadline_at": "2026-06-25 10:00:00",
+        "completed_at": null,
+        "cancelled_at": null,
+        "created_at": "2026-06-25 09:00:00",
+        "business_title": "打印机无法打印",
+        "business_status": "pending"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 10,
+    "pages": 1
+  }
+}
+```
+
+业务规则：
+
+```text
+1. 只返回当前登录用户 assignee_id = 当前用户ID 的待办；
+2. 排除 is_deleted = 1 的逻辑删除数据；
+3. 返回 business_type 和 business_id，供前端跳转业务详情页。
+```
+
+---
+
+## 19.2 查询我的待办统计
+
+```http
+GET /api/v1/todos/my/statistics
+```
+
+权限：todo:view_self
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "pending_count": 3,
+    "processing_count": 2,
+    "expired_count": 1,
+    "today_deadline_count": 4,
+    "urgent_count": 1
+  }
+}
+```
+
+---
+
+## 19.3 管理员查询全部待办
+
+```http
+GET /api/v1/todos
+```
+
+权限：todo:view_all
+
+查询参数：
+
+| 参数            | 类型     | 必填 | 说明 |
+| ------------- | ------ | -- | --- |
+| assignee_id   | int    | 否 | 处理人ID |
+| status        | string | 否 | 待办状态 |
+| todo_type     | string | 否 | 待办类型 |
+| business_type | string | 否 | 业务类型 |
+| priority      | string | 否 | 优先级 |
+| keyword       | string | 否 | 标题或内容关键字 |
+| start_date    | string | 否 | 创建开始时间 |
+| end_date      | string | 否 | 创建结束时间 |
+| page          | int    | 否 | 页码 |
+| page_size     | int    | 否 | 每页数量 |
+
+成功响应：同“查询我的待办列表”。
+
+---
+
+## 19.4 创建待办事项
+
+```http
+POST /api/v1/todos
+```
+
+权限：todo:create
+
+请求参数：
+
+```json
+{
+  "title": "待处理工单：打印机无法打印",
+  "content": "工单 TK202606230002/打印机无法打印 已分配给你，请及时处理。",
+  "todo_type": "ticket_process",
+  "business_type": "ticket",
+  "business_id": 6,
+  "assignee_id": 2,
+  "priority": "normal",
+  "deadline_at": "2026-06-25 10:00:00",
+  "remark": "系统自动创建"
+}
+```
+
+业务规则：
+
+```text
+1. 主要供后端业务模块内部调用，也提供管理员接口；
+2. 创建时自动生成 todo_no，格式 TODO + yyyyMMdd + 4位序号；
+3. 避免重复生成相同 business_type、business_id、todo_type、assignee_id 的未完成待办；
+4. 创建成功后可以复用站内信发送“你有一个新的待办事项”通知；
+5. 创建成功后记录操作日志。
+```
+
+---
+
+## 19.5 查询待办详情
+
+```http
+GET /api/v1/todos/{todo_id}
+```
+
+权限：登录用户可访问；普通用户只能查看自己的待办，管理员可查看全部。
+
+成功响应：返回单条待办详情。
+
+---
+
+## 19.6 标记待办为处理中
+
+```http
+PUT /api/v1/todos/{todo_id}/start
+```
+
+权限：todo:update
+
+请求参数：
+
+```json
+{
+  "remark": "开始处理"
+}
+```
+
+业务规则：
+
+```text
+1. 只有 pending 状态可以变为 processing；
+2. 普通用户只能处理自己的待办；
+3. 管理员可以处理全部待办；
+4. 已完成、已取消、已超时待办不允许开始处理；
+5. 操作成功后记录操作日志。
+```
+
+---
+
+## 19.7 标记待办完成
+
+```http
+PUT /api/v1/todos/{todo_id}/complete
+```
+
+权限：todo:update
+
+请求参数：
+
+```json
+{
+  "remark": "处理完成"
+}
+```
+
+业务规则：
+
+```text
+1. pending、processing、expired 状态可以标记完成；
+2. 完成后 status = completed；
+3. 写入 completed_at；
+4. 操作成功后记录操作日志。
+```
+
+---
+
+## 19.8 取消待办
+
+```http
+PUT /api/v1/todos/{todo_id}/cancel
+```
+
+权限：todo:cancel
+
+请求参数：
+
+```json
+{
+  "remark": "业务已取消"
+}
+```
+
+业务规则：
+
+```text
+1. pending、processing、expired 状态可以取消；
+2. 取消后 status = cancelled；
+3. 写入 cancelled_at；
+4. 工单取消、关闭等业务变化时，系统会自动取消相关未完成待办；
+5. 操作成功后记录操作日志。
+```
+
+---
+
+## 19.9 工单流程联动规则
+
+```text
+1. 员工提交工单后：
+   - 给管理员生成 ticket_assign 待派单待办；
+   - deadline_at 使用工单 sla_response_deadline。
+
+2. 管理员派单后：
+   - 关闭管理员 ticket_assign 待办；
+   - 给被指派运维人员生成 ticket_process 待处理待办；
+   - deadline_at 使用工单 sla_resolve_deadline。
+
+3. 运维人员开始处理后：
+   - 将对应 ticket_process 待办状态从 pending 改为 processing。
+
+4. 运维人员完成工单后：
+   - 将处理人 ticket_process 待办标记为 completed；
+   - 给报修人生成 ticket_confirm 待确认待办。
+
+5. 工单取消后：
+   - 自动取消该工单下所有未完成待办。
+```
+
+---
+
+## 19.10 待办超时扫描规则
+
+APScheduler 定时任务会在执行工单 SLA 超时扫描后，继续扫描待办超时。
+
+扫描条件：
+
+```text
+status IN (pending, processing)
+deadline_at IS NOT NULL
+deadline_at < 当前时间
+expire_notice_sent = 0
+is_deleted = 0
+```
+
+满足条件后：
+
+```text
+1. 更新 status = expired；
+2. 更新 expire_notice_sent = 1；
+3. 写入 reminded_at；
+4. 调用站内信服务给 assignee_id 发送“你有一个待办已超时”通知；
+5. 如果 business_type = ticket，则同步更新工单 response_overdue 或 resolve_overdue。
+```
+
+任务执行结果：
+
+```json
+{
+  "scanned": 5,
+  "expired": 5,
+  "notification_created": 5,
+  "skipped": 0
+}
+```
+
+---
+
+# 20. 工单状态流转规则
 
 工单状态只能按照以下规则流转：
 
@@ -3853,9 +4173,9 @@ processing -> cancelled
 
 ---
 
-# 20. 后端实现要求
+# 21. 后端实现要求
 
-## 20.1 FastAPI 路由建议
+## 21.1 FastAPI 路由建议
 
 建议拆分以下 router：
 
@@ -3872,6 +4192,7 @@ app/api/v1/routers/dicts.py
 app/api/v1/routers/faqs.py
 app/api/v1/routers/notifications.py
 app/api/v1/routers/sla_rules.py
+app/api/v1/routers/todos.py
 app/routers/rbac.py
 app/scheduler/scheduler.py
 app/scheduler/jobs.py
@@ -3879,7 +4200,7 @@ app/scheduler/jobs.py
 
 ---
 
-## 20.2 定时任务目录建议
+## 21.2 定时任务目录建议
 
 建议将 APScheduler 相关代码拆分到独立目录：
 
@@ -3894,7 +4215,7 @@ app/scheduler/jobs.py        定时任务入口
 
 ---
 
-## 20.3 Service 层建议
+## 21.3 Service 层建议
 
 建议拆分以下 service：
 
@@ -3910,11 +4231,12 @@ app/services/faq_service.py
 app/services/notification_service.py
 app/services/rbac_service.py
 app/services/sla_service.py
+app/services/todo_service.py
 ```
 
 ---
 
-## 20.4 数据模型建议
+## 21.4 数据模型建议
 
 建议拆分以下 model：
 
@@ -3930,11 +4252,12 @@ app/models/faq.py
 app/models/notification.py
 app/models/rbac.py
 app/models/sla_rule.py
+app/models/todo.py
 ```
 
 ---
 
-## 20.5 Pydantic Schema 建议
+## 21.5 Pydantic Schema 建议
 
 建议拆分以下 schema：
 
@@ -3949,11 +4272,12 @@ app/schemas/faq_schema.py
 app/schemas/notification_schema.py
 app/schemas/rbac_schema.py
 app/schemas/sla_rule_schema.py
+app/schemas/todo_schema.py
 ```
 
 ---
 
-## 20.6 统一响应工具
+## 21.6 统一响应工具
 
 请封装统一响应方法：
 
@@ -3975,7 +4299,7 @@ def fail(code=40000, message="操作失败", data=None):
 
 ---
 
-## 20.7 权限校验要求
+## 21.7 权限校验要求
 
 需要实现依赖函数：
 
@@ -4002,7 +4326,7 @@ sys_user.role 可以继续作为用户基础信息字段返回；
 
 ---
 
-## 20.8 定时任务配置要求
+## 21.8 定时任务配置要求
 
 依赖要求：
 
@@ -4035,7 +4359,7 @@ SLA_CHECK_INTERVAL_MINUTES=5
 
 ---
 
-## 20.9 操作日志要求
+## 21.9 操作日志要求
 
 以下操作必须写入 sys_operation_log：
 
@@ -4071,6 +4395,10 @@ SLA_CHECK_INTERVAL_MINUTES=5
 修改 SLA 规则
 启用停用 SLA 规则
 删除 SLA 规则
+创建待办
+开始处理待办
+完成待办
+取消待办
 ```
 
 日志字段：

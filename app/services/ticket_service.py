@@ -25,6 +25,7 @@ from app.schemas.ticket import (
     TicketUpdate,
 )
 from app.services.sla_service import SlaService
+from app.services.todo_service import TodoService
 from app.utils.permissions import get_user_permission_codes, get_user_role_codes
 from app.utils.timezone import local_now
 
@@ -54,6 +55,7 @@ class TicketService:
         ticket = Ticket(**data)
         self.db.add(ticket)
         self.db.flush()
+        TodoService(self.db).create_ticket_assign_todos(ticket, created_by=ticket.reporter_id)
         self.db.add(
             TicketRecord(
                 ticket_id=ticket.id,
@@ -159,6 +161,7 @@ class TicketService:
             TicketAction.ASSIGN,
             payload.remark,
         )
+        TodoService(self.db).handle_ticket_assigned(ticket, operator_id=operator_id)
         self.db.commit()
         self.db.refresh(ticket)
         return ticket
@@ -184,6 +187,7 @@ class TicketService:
             TicketAction.START,
             payload.remark,
         )
+        TodoService(self.db).handle_ticket_started(ticket)
         self.db.commit()
         self.db.refresh(ticket)
         return ticket
@@ -225,6 +229,7 @@ class TicketService:
             TicketAction.FINISH,
             payload.remark,
         )
+        TodoService(self.db).handle_ticket_completed(ticket, operator_id=operator.id)
         self.db.commit()
         self.db.refresh(ticket)
         return ticket
@@ -250,6 +255,7 @@ class TicketService:
             TicketAction.CANCEL,
             payload.reason,
         )
+        TodoService(self.db).handle_ticket_cancelled(ticket, remark=payload.reason)
         self.db.commit()
         self.db.refresh(ticket)
         return ticket
