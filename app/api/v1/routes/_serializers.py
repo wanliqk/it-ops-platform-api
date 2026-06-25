@@ -151,6 +151,46 @@ def todo_dict(todo: Any) -> dict[str, Any]:
     return data
 
 
+def work_group_dict(group: Any) -> dict[str, Any]:
+    data = obj_dict(
+        group,
+        [
+            "id",
+            "group_name",
+            "group_code",
+            "description",
+            "leader_id",
+            "status",
+            "sort_order",
+            "created_at",
+            "updated_at",
+        ],
+    )
+    data["leader_name"] = getattr(group, "leader_name", None)
+    data["member_count"] = getattr(group, "member_count", 0)
+    return data
+
+
+def work_group_member_dict(member: Any) -> dict[str, Any]:
+    data = obj_dict(
+        member,
+        [
+            "id",
+            "group_id",
+            "user_id",
+            "member_role",
+            "status",
+            "joined_at",
+            "created_at",
+            "updated_at",
+        ],
+    )
+    data["username"] = member.user.username if member.user else None
+    data["real_name"] = member.user.real_name if member.user else None
+    data["phone"] = member.user.phone if member.user else None
+    return data
+
+
 def repair_record_dict(record: Any) -> dict[str, Any]:
     data = obj_dict(
         record,

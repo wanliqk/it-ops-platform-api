@@ -45,6 +45,8 @@ it_sla_rule           SLA规则表
 it_faq                常见问题表
 it_notification       站内通知表
 sys_todo              待办事项表
+it_work_group         运维组表
+it_work_group_member  运维组成员表
 sys_operation_log     操作日志表
 ```
 
@@ -323,6 +325,7 @@ SLA 规则使用 medium 表示普通；
 | FAQ 管理 | faq:view、faq:create、faq:update、faq:status、faq:delete、faq:stats |
 | SLA规则管理 | sla:rule:list、sla:rule:create、sla:rule:update、sla:rule:delete、sla:rule:enable |
 | 待办事项 | todo:view_self、todo:view_all、todo:create、todo:update、todo:cancel |
+| 运维组管理 | work_group:list、work_group:create、work_group:update、work_group:delete、work_group:member:list、work_group:member:add、work_group:member:update、work_group:member:delete |
 | 操作日志   | operation_log:view |
 | 首页看板   | dashboard:view |
 | 字典     | dict:view |
@@ -4139,7 +4142,502 @@ is_deleted = 0
 
 ---
 
-# 20. 工单状态流转规则
+# 20. 运维组 Work Group API
+
+运维组用于工单业务分派，例如桌面运维组、网络运维组、打印机维护组、系统账号组。
+
+注意：
+
+```text
+运维组不是 RBAC 角色；
+RBAC 角色用于权限控制；
+运维组用于工单业务分派和后续自动分配。
+```
+
+## 20.1 查询运维组列表
+
+```http
+GET /api/v1/work-groups
+```
+
+权限：work_group:list
+
+查询参数：
+
+| 参数        | 类型     | 必填 | 默认值 | 说明                       |
+| --------- | ------ | -- | --- | ------------------------ |
+| keyword   | string | 否  | -   | 按 group_name / group_code 模糊查询 |
+| status    | int    | 否  | -   | 状态：1启用，0停用              |
+| page      | int    | 否  | 1   | 页码                       |
+| page_size | int    | 否  | 10  | 每页数量，最大 100             |
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "group_name": "桌面运维组",
+        "group_code": "desktop",
+        "description": "负责办公电脑、桌面软件等日常运维支持",
+        "leader_id": null,
+        "leader_name": null,
+        "status": 1,
+        "sort_order": 10,
+        "member_count": 0,
+        "created_at": "2026-06-25 00:00:00",
+        "updated_at": "2026-06-25 00:00:00"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 10,
+    "pages": 1
+  }
+}
+```
+
+排序规则：
+
+```text
+sort_order ASC, id DESC
+```
+
+说明：
+
+```text
+member_count 只统计 status = 1 的成员。
+```
+
+---
+
+## 20.2 新增运维组
+
+```http
+POST /api/v1/work-groups
+```
+
+权限：work_group:create
+
+请求体：
+
+```json
+{
+  "group_name": "网络运维组",
+  "group_code": "network",
+  "description": "负责网络链路、交换机、无线网络等运维支持",
+  "leader_id": 2,
+  "status": 1,
+  "sort_order": 20
+}
+```
+
+校验规则：
+
+```text
+1. group_name 必填；
+2. group_code 必填且唯一；
+3. leader_id 可为空；不为空时必须是已存在用户。
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "运维组创建成功",
+  "data": {
+    "id": 2,
+    "group_name": "网络运维组",
+    "group_code": "network",
+    "description": "负责网络链路、交换机、无线网络等运维支持",
+    "leader_id": 2,
+    "leader_name": "张工",
+    "status": 1,
+    "sort_order": 20,
+    "member_count": 0,
+    "created_at": "2026-06-25 10:00:00",
+    "updated_at": "2026-06-25 10:00:00"
+  }
+}
+```
+
+错误说明：
+
+| 场景              | HTTP | code  | message      |
+| --------------- | ---- | ----- | ------------ |
+| group_code 重复  | 409  | 40900 | 运维组编码已存在    |
+| leader_id 不存在 | 404  | 40400 | 组长用户不存在     |
+
+---
+
+## 20.3 查询运维组详情
+
+```http
+GET /api/v1/work-groups/{group_id}
+```
+
+权限：work_group:list
+
+路径参数：
+
+| 参数       | 类型  | 必填 | 说明    |
+| -------- | --- | -- | ----- |
+| group_id | int | 是  | 运维组ID |
+
+成功响应：返回字段同“查询运维组列表”中的单条记录。
+
+不存在时返回：
+
+```json
+{
+  "code": 40400,
+  "message": "资源不存在",
+  "data": null
+}
+```
+
+---
+
+## 20.4 修改运维组
+
+```http
+PUT /api/v1/work-groups/{group_id}
+```
+
+权限：work_group:update
+
+请求体：
+
+```json
+{
+  "group_name": "网络运维组",
+  "group_code": "network",
+  "description": "负责网络设备和链路维护",
+  "leader_id": 2,
+  "status": 1,
+  "sort_order": 20
+}
+```
+
+说明：
+
+```text
+1. 运维组必须存在；
+2. 修改 group_code 时不能和其他运维组重复；
+3. leader_id 可为空；不为空时必须是已存在用户；
+4. 当 status 修改为 0 时，系统会同步禁用该组下启用状态成员。
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "运维组修改成功",
+  "data": {
+    "id": 2,
+    "group_name": "网络运维组",
+    "group_code": "network",
+    "description": "负责网络设备和链路维护",
+    "leader_id": 2,
+    "leader_name": "张工",
+    "status": 1,
+    "sort_order": 20,
+    "member_count": 1,
+    "created_at": "2026-06-25 10:00:00",
+    "updated_at": "2026-06-25 10:05:00"
+  }
+}
+```
+
+---
+
+## 20.5 删除运维组
+
+```http
+DELETE /api/v1/work-groups/{group_id}
+```
+
+权限：work_group:delete
+
+说明：
+
+```text
+删除运维组时会一并删除该运维组成员关系。
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "运维组删除成功",
+  "data": null
+}
+```
+
+---
+
+## 20.6 查询运维组成员列表
+
+```http
+GET /api/v1/work-groups/{group_id}/members
+```
+
+权限：work_group:member:list
+
+查询参数：
+
+| 参数        | 类型     | 必填 | 默认值 | 说明                    |
+| --------- | ------ | -- | --- | --------------------- |
+| keyword   | string | 否  | -   | 按用户名、真实姓名、手机号模糊查询    |
+| status    | int    | 否  | 1   | 状态：1启用，0停用；默认只查启用成员 |
+| page      | int    | 否  | 1   | 页码                    |
+| page_size | int    | 否  | 10  | 每页数量，最大 100          |
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "group_id": 2,
+        "user_id": 2,
+        "username": "it_zhang",
+        "real_name": "张工",
+        "phone": "13800000002",
+        "member_role": "leader",
+        "status": 1,
+        "joined_at": "2026-06-25 10:10:00",
+        "created_at": "2026-06-25 10:10:00",
+        "updated_at": "2026-06-25 10:10:00"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 10,
+    "pages": 1
+  }
+}
+```
+
+排序规则：
+
+```text
+leader 优先，id DESC
+```
+
+---
+
+## 20.7 添加运维组成员
+
+```http
+POST /api/v1/work-groups/{group_id}/members
+```
+
+权限：work_group:member:add
+
+请求体：
+
+```json
+{
+  "user_id": 2,
+  "member_role": "member"
+}
+```
+
+字段说明：
+
+| 字段          | 类型     | 必填 | 默认值    | 说明                 |
+| ----------- | ------ | -- | ------ | ------------------ |
+| user_id     | int    | 是  | -      | 用户ID               |
+| member_role | string | 否  | member | leader组长，member成员 |
+
+规则：
+
+```text
+1. 运维组必须存在且 status = 1；
+2. 用户必须存在且 status = 1；
+3. 同一个用户不能重复加入同一个启用关系；
+4. 如果已存在 group_id + user_id 且 status = 0，则重新启用并更新 member_role；
+5. member_role = leader 不会自动修改 it_work_group.leader_id，组长字段由运维组编辑接口维护。
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "成员添加成功",
+  "data": {
+    "id": 1,
+    "group_id": 2,
+    "user_id": 2,
+    "username": "it_zhang",
+    "real_name": "张工",
+    "phone": "13800000002",
+    "member_role": "member",
+    "status": 1,
+    "joined_at": "2026-06-25 10:10:00",
+    "created_at": "2026-06-25 10:10:00",
+    "updated_at": "2026-06-25 10:10:00"
+  }
+}
+```
+
+错误说明：
+
+| 场景             | HTTP | code  | message          |
+| -------------- | ---- | ----- | ---------------- |
+| 运维组或用户不存在/未启用 | 404  | 40400 | 运维组或用户不存在或未启用 |
+| 用户已在该组中       | 409  | 40900 | 用户已在该运维组中      |
+
+---
+
+## 20.8 修改运维组成员
+
+```http
+PUT /api/v1/work-groups/{group_id}/members/{user_id}
+```
+
+权限：work_group:member:update
+
+请求体：
+
+```json
+{
+  "member_role": "leader",
+  "status": 1
+}
+```
+
+规则：
+
+```text
+1. 成员关系必须存在；
+2. member_role 只能是 leader 或 member；
+3. status 只能是 1 或 0。
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "成员修改成功",
+  "data": {
+    "id": 1,
+    "group_id": 2,
+    "user_id": 2,
+    "username": "it_zhang",
+    "real_name": "张工",
+    "phone": "13800000002",
+    "member_role": "leader",
+    "status": 1,
+    "joined_at": "2026-06-25 10:10:00",
+    "created_at": "2026-06-25 10:10:00",
+    "updated_at": "2026-06-25 10:15:00"
+  }
+}
+```
+
+---
+
+## 20.9 移除运维组成员
+
+```http
+DELETE /api/v1/work-groups/{group_id}/members/{user_id}
+```
+
+权限：work_group:member:delete
+
+说明：
+
+```text
+1. 移除成员会将成员关系 status 设置为 0；
+2. 如果该用户正好是 it_work_group.leader_id，则同步将 leader_id 置空；
+3. 不存在的成员关系返回 404。
+```
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "成员移除成功",
+  "data": null
+}
+```
+
+---
+
+## 20.10 初始化数据
+
+初始化 SQL 包含以下运维组测试数据：
+
+| group_name | group_code | 说明 |
+| ---------- | ---------- | ---- |
+| 桌面运维组 | desktop | 办公电脑、桌面软件等日常运维支持 |
+| 网络运维组 | network | 网络链路、交换机、无线网络等运维支持 |
+| 打印机维护组 | printer | 打印机、复印机及耗材相关维护 |
+| 系统账号组 | account | 账号开通、权限申请和系统登录问题 |
+
+成员测试数据不在初始化 SQL 中硬编码，避免不同环境用户 ID 不一致。
+
+---
+
+## 20.11 curl 测试示例
+
+```bash
+# 查询运维组
+curl -H "Authorization: Bearer <token>" \
+  "http://127.0.0.1:8000/api/v1/work-groups?page=1&page_size=10"
+
+# 新增运维组
+curl -X POST "http://127.0.0.1:8000/api/v1/work-groups" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"网络运维组","group_code":"network","description":"负责网络维护","leader_id":2,"status":1,"sort_order":20}'
+
+# 修改运维组
+curl -X PUT "http://127.0.0.1:8000/api/v1/work-groups/2" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"description":"负责网络设备和链路维护","status":1}'
+
+# 查询成员
+curl -H "Authorization: Bearer <token>" \
+  "http://127.0.0.1:8000/api/v1/work-groups/2/members"
+
+# 添加成员
+curl -X POST "http://127.0.0.1:8000/api/v1/work-groups/2/members" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":2,"member_role":"member"}'
+
+# 修改成员
+curl -X PUT "http://127.0.0.1:8000/api/v1/work-groups/2/members/2" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"member_role":"leader","status":1}'
+
+# 移除成员
+curl -X DELETE "http://127.0.0.1:8000/api/v1/work-groups/2/members/2" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+# 21. 工单状态流转规则
 
 工单状态只能按照以下规则流转：
 
@@ -4173,9 +4671,9 @@ processing -> cancelled
 
 ---
 
-# 21. 后端实现要求
+# 22. 后端实现要求
 
-## 21.1 FastAPI 路由建议
+## 22.1 FastAPI 路由建议
 
 建议拆分以下 router：
 
@@ -4193,6 +4691,7 @@ app/api/v1/routers/faqs.py
 app/api/v1/routers/notifications.py
 app/api/v1/routers/sla_rules.py
 app/api/v1/routers/todos.py
+app/api/v1/routers/work_groups.py
 app/routers/rbac.py
 app/scheduler/scheduler.py
 app/scheduler/jobs.py
@@ -4200,7 +4699,7 @@ app/scheduler/jobs.py
 
 ---
 
-## 21.2 定时任务目录建议
+## 22.2 定时任务目录建议
 
 建议将 APScheduler 相关代码拆分到独立目录：
 
@@ -4215,7 +4714,7 @@ app/scheduler/jobs.py        定时任务入口
 
 ---
 
-## 21.3 Service 层建议
+## 22.3 Service 层建议
 
 建议拆分以下 service：
 
@@ -4232,11 +4731,12 @@ app/services/notification_service.py
 app/services/rbac_service.py
 app/services/sla_service.py
 app/services/todo_service.py
+app/services/work_group_service.py
 ```
 
 ---
 
-## 21.4 数据模型建议
+## 22.4 数据模型建议
 
 建议拆分以下 model：
 
@@ -4253,11 +4753,12 @@ app/models/notification.py
 app/models/rbac.py
 app/models/sla_rule.py
 app/models/todo.py
+app/models/work_group.py
 ```
 
 ---
 
-## 21.5 Pydantic Schema 建议
+## 22.5 Pydantic Schema 建议
 
 建议拆分以下 schema：
 
@@ -4273,11 +4774,12 @@ app/schemas/notification_schema.py
 app/schemas/rbac_schema.py
 app/schemas/sla_rule_schema.py
 app/schemas/todo_schema.py
+app/schemas/work_group_schema.py
 ```
 
 ---
 
-## 21.6 统一响应工具
+## 22.6 统一响应工具
 
 请封装统一响应方法：
 
@@ -4299,7 +4801,7 @@ def fail(code=40000, message="操作失败", data=None):
 
 ---
 
-## 21.7 权限校验要求
+## 22.7 权限校验要求
 
 需要实现依赖函数：
 
@@ -4326,7 +4828,7 @@ sys_user.role 可以继续作为用户基础信息字段返回；
 
 ---
 
-## 21.8 定时任务配置要求
+## 22.8 定时任务配置要求
 
 依赖要求：
 
@@ -4359,7 +4861,7 @@ SLA_CHECK_INTERVAL_MINUTES=5
 
 ---
 
-## 21.9 操作日志要求
+## 22.9 操作日志要求
 
 以下操作必须写入 sys_operation_log：
 
@@ -4399,6 +4901,12 @@ SLA_CHECK_INTERVAL_MINUTES=5
 开始处理待办
 完成待办
 取消待办
+创建运维组
+修改运维组
+删除运维组
+添加运维组成员
+修改运维组成员
+移除运维组成员
 ```
 
 日志字段：

@@ -16,6 +16,7 @@ from app.models.ticket import (
 )
 from app.models.todo import Todo, TodoPriority, TodoStatus, TodoType
 from app.models.user import User, UserRole
+from app.models.work_group import WorkGroup, WorkGroupMember, WorkGroupMemberRole
 
 __all__ = [
     "Asset",
@@ -45,4 +46,7 @@ __all__ = [
     "TodoType",
     "User",
     "UserRole",
+    "WorkGroup",
+    "WorkGroupMember",
+    "WorkGroupMemberRole",
 ]

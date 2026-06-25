@@ -323,7 +323,7 @@ CREATE TABLE `sys_permission`  (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `permission_code`(`permission_code`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 125 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统权限表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 138 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统权限表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Records of sys_permission
@@ -382,6 +382,14 @@ INSERT INTO `sys_permission` VALUES (121, 'todo:view_all', '查看全部待办',
 INSERT INTO `sys_permission` VALUES (122, 'todo:create', '创建待办', '待办事项', 'api', 'POST', '/api/v1/todos', '创建待办事项', 122, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
 INSERT INTO `sys_permission` VALUES (123, 'todo:update', '处理待办', '待办事项', 'api', 'PUT', '/api/v1/todos/{todo_id}/start', '开始或完成待办事项', 123, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
 INSERT INTO `sys_permission` VALUES (124, 'todo:cancel', '取消待办', '待办事项', 'api', 'PUT', '/api/v1/todos/{todo_id}/cancel', '取消待办事项', 124, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (130, 'work_group:list', '查看运维组', '运维组管理', 'api', 'GET', '/api/v1/work-groups', '查看运维组列表和详情', 130, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (131, 'work_group:create', '创建运维组', '运维组管理', 'api', 'POST', '/api/v1/work-groups', '创建运维组', 131, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (132, 'work_group:update', '修改运维组', '运维组管理', 'api', 'PUT', '/api/v1/work-groups/{id}', '修改运维组', 132, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (133, 'work_group:delete', '删除运维组', '运维组管理', 'api', 'DELETE', '/api/v1/work-groups/{id}', '删除运维组', 133, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (134, 'work_group:member:list', '查看运维组成员', '运维组管理', 'api', 'GET', '/api/v1/work-groups/{group_id}/members', '查看运维组成员列表', 134, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (135, 'work_group:member:add', '添加运维组成员', '运维组管理', 'api', 'POST', '/api/v1/work-groups/{group_id}/members', '添加运维组成员', 135, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (136, 'work_group:member:update', '修改运维组成员', '运维组管理', 'api', 'PUT', '/api/v1/work-groups/{group_id}/members/{user_id}', '修改运维组成员信息', 136, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `sys_permission` VALUES (137, 'work_group:member:delete', '移除运维组成员', '运维组管理', 'api', 'DELETE', '/api/v1/work-groups/{group_id}/members/{user_id}', '移除运维组成员', 137, 1, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
 
 -- ----------------------------
 -- Table structure for sys_role
@@ -421,7 +429,7 @@ CREATE TABLE `sys_role_permission`  (
   INDEX `fk_role_permission_permission`(`permission_id`) USING BTREE,
   CONSTRAINT `fk_role_permission_permission` FOREIGN KEY (`permission_id`) REFERENCES `sys_permission` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_role_permission_role` FOREIGN KEY (`role_id`) REFERENCES `sys_role` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
-) ENGINE = InnoDB AUTO_INCREMENT = 108 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色权限关联表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 116 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色权限关联表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Records of sys_role_permission
@@ -484,6 +492,14 @@ INSERT INTO `sys_role_permission` VALUES (104, 2, 120, '2026-06-25 00:00:00');
 INSERT INTO `sys_role_permission` VALUES (105, 2, 123, '2026-06-25 00:00:00');
 INSERT INTO `sys_role_permission` VALUES (106, 3, 120, '2026-06-25 00:00:00');
 INSERT INTO `sys_role_permission` VALUES (107, 3, 123, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (108, 1, 130, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (109, 1, 131, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (110, 1, 132, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (111, 1, 133, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (112, 1, 134, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (113, 1, 135, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (114, 1, 136, '2026-06-25 00:00:00');
+INSERT INTO `sys_role_permission` VALUES (115, 1, 137, '2026-06-25 00:00:00');
 INSERT INTO `sys_role_permission` VALUES (64, 2, 35, '2026-06-23 17:19:26');
 INSERT INTO `sys_role_permission` VALUES (65, 2, 33, '2026-06-23 17:19:26');
 INSERT INTO `sys_role_permission` VALUES (66, 2, 30, '2026-06-23 17:19:26');
@@ -533,6 +549,58 @@ INSERT INTO `sys_user` VALUES (1, 'admin', 'pbkdf2_sha256$260000$abc123$26f0fb8c
 INSERT INTO `sys_user` VALUES (2, 'it_zhang', 'pbkdf2_sha256$260000$abc123$26f0fb8c10bb28dc85118fe973c28b0521d6c98d766db114a04e358e74c447f0', '张工', 'it_staff', '信息部', '13800000002', 'zhang@example.com', 1, '2026-06-22 19:39:10', '2026-06-22 20:46:06');
 INSERT INTO `sys_user` VALUES (3, 'employee_li', 'pbkdf2_sha256$260000$abc123$26f0fb8c10bb28dc85118fe973c28b0521d6c98d766db114a04e358e74c447f0', '李明', 'employee', '财务部', '13800000003', 'liming@example.com', 1, '2026-06-22 19:39:10', '2026-06-22 20:46:07');
 INSERT INTO `sys_user` VALUES (4, 'employee_wang', 'pbkdf2_sha256$260000$abc123$26f0fb8c10bb28dc85118fe973c28b0521d6c98d766db114a04e358e74c447f0', '王芳', 'employee', '运营部', '13800000004', 'wangfang@example.com', 1, '2026-06-22 19:39:10', '2026-06-22 20:46:10');
+
+-- ----------------------------
+-- Table structure for it_work_group
+-- ----------------------------
+DROP TABLE IF EXISTS `it_work_group`;
+CREATE TABLE `it_work_group`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '运维组ID',
+  `group_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '运维组名称',
+  `group_code` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '运维组编码',
+  `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '运维组说明',
+  `leader_id` bigint(20) NULL DEFAULT NULL COMMENT '组长用户ID，关联sys_user表',
+  `status` tinyint(4) NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
+  `sort_order` int(11) NOT NULL DEFAULT 0 COMMENT '排序值，越小越靠前',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_group_code`(`group_code`) USING BTREE,
+  INDEX `idx_status`(`status`) USING BTREE,
+  INDEX `idx_sort_order`(`sort_order`) USING BTREE,
+  INDEX `fk_work_group_leader`(`leader_id`) USING BTREE,
+  CONSTRAINT `fk_work_group_leader` FOREIGN KEY (`leader_id`) REFERENCES `sys_user` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '运维组表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Records of it_work_group
+-- ----------------------------
+INSERT INTO `it_work_group` VALUES (1, '桌面运维组', 'desktop', '负责办公电脑、桌面软件等日常运维支持', NULL, 1, 10, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `it_work_group` VALUES (2, '网络运维组', 'network', '负责网络链路、交换机、无线网络等运维支持', NULL, 1, 20, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `it_work_group` VALUES (3, '打印机维护组', 'printer', '负责打印机、复印机及耗材相关维护', NULL, 1, 30, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+INSERT INTO `it_work_group` VALUES (4, '系统账号组', 'account', '负责账号开通、权限申请和系统登录问题', NULL, 1, 40, '2026-06-25 00:00:00', '2026-06-25 00:00:00');
+
+-- ----------------------------
+-- Table structure for it_work_group_member
+-- ----------------------------
+DROP TABLE IF EXISTS `it_work_group_member`;
+CREATE TABLE `it_work_group_member`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '成员关系ID',
+  `group_id` bigint(20) NOT NULL COMMENT '运维组ID，关联it_work_group表',
+  `user_id` bigint(20) NOT NULL COMMENT '用户ID，关联sys_user表',
+  `member_role` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'member' COMMENT '组内角色：leader组长，member成员',
+  `status` tinyint(4) NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
+  `joined_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_group_user`(`group_id`, `user_id`) USING BTREE,
+  INDEX `idx_group_id`(`group_id`) USING BTREE,
+  INDEX `idx_user_id`(`user_id`) USING BTREE,
+  INDEX `idx_status`(`status`) USING BTREE,
+  CONSTRAINT `fk_work_group_member_group` FOREIGN KEY (`group_id`) REFERENCES `it_work_group` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `fk_work_group_member_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '运维组成员表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for sys_todo
