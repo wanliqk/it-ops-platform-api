@@ -368,7 +368,7 @@ SLA 规则使用 medium 表示普通；
 | 资产分类管理 | asset_category:view、asset_category:create、asset_category:update、asset_category:delete |
 | 资产管理   | asset:view、asset:create、asset:update、asset:status、asset:delete、asset:repair_records |
 | 工单分类管理 | ticket_category:list、ticket_category:create、ticket_category:update、ticket_category:delete、ticket_category:status |
-| 工单管理   | ticket:create、ticket:view_all、ticket:view_self、ticket:update、ticket:assign、ticket:start、ticket:complete、ticket:cancel、ticket:delete、ticket:records、ticket:auto-assign |
+| 工单管理   | ticket:create、ticket:view_all、ticket:view_self、ticket:update、ticket:assign、ticket:start、ticket:complete、ticket:cancel、ticket:delete、ticket:records、ticket:auto-assign、ticket:statistics:view |
 | 工单自动分配 | ticket:assignment-rule:list、ticket:assignment-rule:create、ticket:assignment-rule:update、ticket:assignment-rule:delete、ticket:assignment-rule:status |
 | 维修记录   | repair_record:view、repair_record:update |
 | FAQ 管理 | faq:view、faq:create、faq:update、faq:status、faq:delete、faq:stats |
@@ -1692,7 +1692,53 @@ GET /api/v1/tickets?status=pending&page=1&page_size=10
 
 ---
 
-## 9.2 创建报修工单
+## 9.2 工单状态统计
+
+```http
+GET /api/v1/tickets/statistics/summary
+```
+
+权限：ticket:statistics:view
+
+请求参数：无
+
+成功响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "total": 128,
+    "pending_assign": 6,
+    "pending_accept": 21,
+    "processing": 15,
+    "pending_confirm": 8,
+    "completed": 70,
+    "closed": 5,
+    "cancelled": 3,
+    "overdue": 4
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| total | 全部工单数量 |
+| pending_assign | 待分派工单数量；当前兼容统计 status = pending |
+| pending_accept | 待受理工单数量 |
+| processing | 处理中工单数量 |
+| pending_confirm | 待确认工单数量 |
+| completed | 已完成工单数量 |
+| closed | 已关闭工单数量 |
+| cancelled | 已取消工单数量 |
+| overdue | 未完成、未关闭、未取消且 SLA 截止时间已过或已被标记超时的工单数量 |
+
+---
+
+## 9.3 创建报修工单
 
 ```http
 POST /api/v1/tickets
@@ -1766,7 +1812,7 @@ POST /api/v1/tickets
 
 ---
 
-## 9.3 查询工单详情
+## 9.4 查询工单详情
 
 ```http
 GET /api/v1/tickets/{ticket_id}
@@ -1850,7 +1896,7 @@ GET /api/v1/tickets/{ticket_id}
 
 ---
 
-## 9.4 修改工单基础信息
+## 9.5 修改工单基础信息
 
 ```http
 PUT /api/v1/tickets/{ticket_id}
@@ -1891,7 +1937,7 @@ PUT /api/v1/tickets/{ticket_id}
 
 ---
 
-## 9.5 派单
+## 9.6 派单
 
 ```http
 PATCH /api/v1/tickets/{ticket_id}/assign
@@ -1942,7 +1988,7 @@ PATCH /api/v1/tickets/{ticket_id}/assign
 
 ---
 
-## 9.6 接单并开始处理
+## 9.7 接单并开始处理
 
 ```http
 PATCH /api/v1/tickets/{ticket_id}/start
@@ -1991,7 +2037,7 @@ PATCH /api/v1/tickets/{ticket_id}/start
 
 ---
 
-## 9.7 完成工单
+## 9.8 完成工单
 
 ```http
 PATCH /api/v1/tickets/{ticket_id}/complete
@@ -2060,7 +2106,7 @@ PATCH /api/v1/tickets/{ticket_id}/complete
 
 ---
 
-## 9.8 取消工单
+## 9.9 取消工单
 
 ```http
 PATCH /api/v1/tickets/{ticket_id}/cancel
@@ -2102,7 +2148,7 @@ PATCH /api/v1/tickets/{ticket_id}/cancel
 
 ---
 
-## 9.9 删除工单
+## 9.10 删除工单
 
 ```http
 DELETE /api/v1/tickets/{ticket_id}

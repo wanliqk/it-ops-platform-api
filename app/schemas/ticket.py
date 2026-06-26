@@ -66,6 +66,18 @@ class TicketCancel(BaseModel):
     reason: str | None = None
 
 
+class TicketStatisticsSummaryResponse(BaseModel):
+    total: int = 0
+    pending_assign: int = 0
+    pending_accept: int = 0
+    processing: int = 0
+    pending_confirm: int = 0
+    completed: int = 0
+    closed: int = 0
+    cancelled: int = 0
+    overdue: int = 0
+
+
 class TicketRead(TicketBase):
     id: int
     ticket_no: str

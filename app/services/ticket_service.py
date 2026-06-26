@@ -22,6 +22,7 @@ from app.schemas.ticket import (
     TicketComplete,
     TicketCreate,
     TicketStart,
+    TicketStatisticsSummaryResponse,
     TicketUpdate,
 )
 from app.services.sla_service import SlaService
@@ -131,6 +132,44 @@ class TicketService:
             )
         )
         return items, total
+
+    def statistics_summary(self) -> TicketStatisticsSummaryResponse:
+        status_counts = {
+            status: count
+            for status, count in self.db.execute(
+                select(Ticket.status, func.count(Ticket.id)).group_by(Ticket.status)
+            )
+        }
+        now = local_now()
+        overdue = self.db.scalar(
+            select(func.count(Ticket.id)).where(
+                Ticket.status.notin_(
+                    [TicketStatus.COMPLETED, TicketStatus.CLOSED, TicketStatus.CANCELLED]
+                ),
+                or_(
+                    Ticket.response_overdue == 1,
+                    Ticket.resolve_overdue == 1,
+                    Ticket.sla_response_deadline < now,
+                    Ticket.sla_resolve_deadline < now,
+                ),
+            )
+        )
+
+        # 当前系统历史上用 pending 表示待分派；新流程自动分配失败后使用 pending_accept。
+        def count_status(status: TicketStatus) -> int:
+            return status_counts.get(status, status_counts.get(status.value, 0))
+
+        return TicketStatisticsSummaryResponse(
+            total=sum(status_counts.values()),
+            pending_assign=count_status(TicketStatus.PENDING),
+            pending_accept=count_status(TicketStatus.PENDING_ACCEPT),
+            processing=count_status(TicketStatus.PROCESSING),
+            pending_confirm=count_status(TicketStatus.PENDING_CONFIRM),
+            completed=count_status(TicketStatus.COMPLETED),
+            closed=count_status(TicketStatus.CLOSED),
+            cancelled=count_status(TicketStatus.CANCELLED),
+            overdue=overdue or 0,
+        )
 
     def update(self, ticket_id: int, payload: TicketUpdate) -> Ticket | None:
         ticket = self.db.get(Ticket, ticket_id)

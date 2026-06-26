@@ -39,6 +39,7 @@ TicketCanceller = Annotated[User, Depends(require_permissions("ticket:cancel"))]
 TicketDeleter = Annotated[User, Depends(require_permissions("ticket:delete"))]
 TicketRecordReader = Annotated[User, Depends(require_permissions("ticket:records"))]
 TicketAutoAssigner = Annotated[User, Depends(require_permissions("ticket:auto-assign"))]
+TicketStatisticsReader = Annotated[User, Depends(require_permissions("ticket:statistics:view"))]
 
 
 @router.get("")
@@ -125,6 +126,11 @@ def auto_assign_ticket(
     )
     db.commit()
     return success(service.result_dict(ticket, result))
+
+
+@router.get("/statistics/summary")
+def ticket_statistics_summary(db: DBSession, _: TicketStatisticsReader) -> dict:
+    return success(TicketService(db).statistics_summary().model_dump())
 
 
 @router.get("/{ticket_id}")
